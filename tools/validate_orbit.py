@@ -76,3 +76,20 @@ print(f"  altitude constant: {(norm(r) - RE) / 1000:.6f} km, speed {norm(v):.2f}
 check("elliptical e=0.3, a=12000 km, 51.6 deg", 12_000_000.0, 0.3, 51.6)
 check("circular equatorial", RE + 400_000, 0.0, 0.0)
 print("ALL CHECKS PASSED")
+
+# --- Extra checks mirroring Assets/Scripts/Editor/ApolloSimulationChecks.cs (same thresholds) ---
+alt = 185_000.0
+a_c = RE + alt
+inc_c = math.radians(32.5)
+worst_alt = worst_spd = worst_lat = 0.0
+v_circ = math.sqrt(MU / a_c)
+for k in range(3001):
+    t = (2 * math.pi / math.sqrt(MU / a_c**3)) * 3 * k / 3000
+    r, v, _ = propagate(a_c, 0.0, inc_c, 0.0, 0.0, 0.0, t)
+    worst_alt = max(worst_alt, abs(norm(r) - RE - alt))
+    worst_spd = max(worst_spd, abs(norm(v) - v_circ))
+    worst_lat = max(worst_lat, abs(math.asin(r[2] / norm(r))))
+print(f"extra: worst altitude error={worst_alt:.2e} m (limit 1e-3), worst speed error={worst_spd:.2e} m/s (limit 1e-6), "
+      f"max latitude={math.degrees(worst_lat):.4f} deg (expected 32.5)")
+assert worst_alt < 1e-3 and worst_spd < 1e-6 and 32.4 < math.degrees(worst_lat) <= 32.5 + 1e-7
+print("EXTRA CHECKS PASSED")

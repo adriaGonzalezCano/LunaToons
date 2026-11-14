@@ -22,6 +22,9 @@ namespace Apollo.OrbitalSim
         public double MeanMotion { get; }           // rad/s
         public double Period { get; }               // s
 
+        public double PeriapsisAltitude => SemiMajorAxis * (1 - Eccentricity) - EarthRadius; // m
+        public double ApoapsisAltitude => SemiMajorAxis * (1 + Eccentricity) - EarthRadius;  // m
+
         public KeplerOrbit(double semiMajorAxis, double eccentricity, double inclination,
                            double rightAscension, double argumentOfPeriapsis, double meanAnomalyAtEpoch)
         {

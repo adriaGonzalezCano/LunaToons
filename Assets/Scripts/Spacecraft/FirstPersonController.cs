@@ -19,7 +19,6 @@ namespace Apollo.Spacecraft
         private Transform cameraTransform;
         private float pitch;
         private float verticalVelocity;
-        private Vector2 lastLookDelta; // TEMPORARY, for diagnosing look-while-walking
 
         private void Awake()
         {
@@ -41,9 +40,7 @@ namespace Apollo.Spacecraft
 
             if (Cursor.lockState == CursorLockMode.Locked)
             {
-                Vector2 rawDelta = mouse.delta.ReadValue();
-                lastLookDelta = rawDelta;
-                Vector2 look = rawDelta * lookSensitivity;
+                Vector2 look = mouse.delta.ReadValue() * lookSensitivity;
                 transform.Rotate(0f, look.x, 0f);
                 pitch = Mathf.Clamp(pitch - look.y, -85f, 85f);
                 cameraTransform.localEulerAngles = new Vector3(pitch, 0f, 0f);
@@ -57,13 +54,6 @@ namespace Apollo.Spacecraft
             verticalVelocity += gravity * Time.deltaTime;
 
             controller.Move((horizontal + Vector3.up * verticalVelocity) * Time.deltaTime);
-        }
-
-        // TEMPORARY diagnostic: shows raw mouse delta and cursor state while playing.
-        private void OnGUI()
-        {
-            GUI.Label(new Rect(10, Screen.height - 60, 500, 50),
-                $"look delta {lastLookDelta} | cursor {Cursor.lockState} | grounded {controller.isGrounded}");
         }
 
         private static void SetCursorLocked(bool locked)

@@ -24,7 +24,6 @@ namespace Apollo.EditorTools
             // Simulation and global systems (always active).
             var systems = new GameObject("SimulationHost");
             var host = systems.AddComponent<SimulationHost>();
-            SetRef(systems.AddComponent<SimulationDebugOverlay>(), "host", host);
             SetRef(systems.AddComponent<SimulationTimeControls>(), "host", host);
             var switcher = systems.AddComponent<EnvironmentSwitcher>();
 
@@ -103,6 +102,7 @@ namespace Apollo.EditorTools
             var rig = new GameObject("MissionControlRig");
             rig.transform.position = new Vector3(100000f, 0f, 0f);
             SetRef(rig.AddComponent<OrbitView>(), "host", host);
+            SetRef(rig.AddComponent<TelemetryPanel>(), "host", host);
 
             var cameraObject = new GameObject("MissionControlCamera");
             cameraObject.transform.SetParent(rig.transform, false);
