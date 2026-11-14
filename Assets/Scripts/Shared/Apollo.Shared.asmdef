@@ -1,0 +1,16 @@
+{
+    "name": "Apollo.Shared",
+    "rootNamespace": "Apollo.Shared",
+    "references": [
+        "Apollo.OrbitalSim"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
