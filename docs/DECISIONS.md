@@ -29,4 +29,4 @@ Statuses: CONFIRMED (approved by owner), ASSUMPTION (working, can change), OPEN.
 | Control Center 2 | ASSUMPTION | Flat equirectangular map, past track (1 orbit back, clamped at MET 0) and predicted track (1.5 orbits) from the analytic orbit |
 | View switching keys | ASSUMPTION | Tab cycles Spacecraft, CC1, CC2; F1/F2/F3 jump directly |
 | Interior style | ASSUMPTION | Command-Module-inspired cabin from primitives (3 couches, instrument panel, hatch, framed window); still a blockout, not accurate to Apollo |
-| Real Earth map | OPEN | Placeholder procedural map; drop an equirectangular image at Assets/Resources/EarthMap.png to replace it |
+| Real Earth map | ASSUMPTION | NASA Blue Marble (owner-supplied, 21600x10800) downscaled to 8192x4096 as Assets/Resources/EarthMap.jpg; original kept in Assets/SourceArt~/ (ignored by Unity). Procedural map remains as fallback |

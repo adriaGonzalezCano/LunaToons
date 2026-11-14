@@ -13,5 +13,5 @@
 - Mission Control view (OrbitView): 1 unit = 100 km, placed at (100000, 0, 0) so the player camera (far plane 20000) never sees it.
 - Spacecraft attitude in V1 (fixed, not simulated): +X along velocity, -Z toward Earth (window wall), Y = orbit normal. Earth is not rotated; the Earth texture is procedural noise, not real map data.
 - Earth rotation in Unity: ECI rotation +theta about Z = Unity rotation -theta about Y (the axis mapping flips handedness).
-- Earth map texture: equirectangular, longitude -180 at the left edge. The UV sphere has u = 0 at longitude 0, so sphere materials use a 0.5 u-offset. A real map can replace the procedural one by adding `Assets/Resources/EarthMap.png`.
+- Earth map texture: equirectangular, longitude -180 at the left edge. The UV sphere has u = 0 at longitude 0, so sphere materials use a 0.5 u-offset. The game loads `Assets/Resources/EarthMap.jpg` (NASA Blue Marble, 8192 x 4096, derived from the 21600 x 10800 original kept in `Assets/SourceArt~/`); the procedural map is only a fallback if that file is missing.
 - Control Center 1 (orbit view) rig at (100000, 0, 0); Control Center 2 (flat map, orthographic camera) rig at (200000, 0, 0), map 200 x 100 units (x = longitude/180 * 100, y = latitude/90 * 50).
