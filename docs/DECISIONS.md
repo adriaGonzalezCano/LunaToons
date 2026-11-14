@@ -30,3 +30,4 @@ Statuses: CONFIRMED (approved by owner), ASSUMPTION (working, can change), OPEN.
 | View switching keys | ASSUMPTION | Tab cycles Spacecraft, CC1, CC2; F1/F2/F3 jump directly |
 | Interior style | ASSUMPTION | Command-Module-inspired cabin from primitives (3 couches, instrument panel, hatch, framed window); still a blockout, not accurate to Apollo |
 | Real Earth map | ASSUMPTION | NASA Blue Marble (owner-supplied, 21600x10800) downscaled to 8192x4096 as Assets/Resources/EarthMap.jpg; original kept in Assets/SourceArt~/ (ignored by Unity). Procedural map remains as fallback |
+| V1 scope | CLOSED | V1 validated by owner on 2026-11-15 and tagged v0.1. Next direction (roles design, first manoeuvre, or multiplayer spike) is OPEN |
