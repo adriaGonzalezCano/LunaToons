@@ -1,3 +1,5 @@
+using Apollo.Core;
+using Apollo.MissionControl;
 using Apollo.Shared;
 using Apollo.Spacecraft;
 using UnityEditor;
@@ -6,7 +8,10 @@ using UnityEngine;
 
 namespace Apollo.EditorTools
 {
-    /// <summary>Menu "Apollo > Build V1 Scene": generates a blockout spacecraft interior, player and simulation host, and saves Assets/Scenes/V1.unity.</summary>
+    /// <summary>
+    /// Menu "Apollo > Build V1 Scene": regenerates Assets/Scenes/V1.unity (overwrites it) with the simulation host,
+    /// a blockout spacecraft interior with one window, the external Earth view, the player and the Mission Control rig.
+    /// </summary>
     public static class ApolloSceneBuilder
     {
         private const string ScenePath = "Assets/Scenes/V1.unity";
@@ -16,12 +21,32 @@ namespace Apollo.EditorTools
         {
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
-            var hostObject = new GameObject("SimulationHost");
-            var host = hostObject.AddComponent<SimulationHost>();
-            var overlay = hostObject.AddComponent<SimulationDebugOverlay>();
-            new SerializedObject(overlay).FindProperty("host").objectReferenceValue = host;
-            new SerializedObject(overlay).ApplyModifiedPropertiesWithoutUndo();
+            // Simulation and global systems (always active).
+            var systems = new GameObject("SimulationHost");
+            var host = systems.AddComponent<SimulationHost>();
+            SetRef(systems.AddComponent<SimulationDebugOverlay>(), "host", host);
+            SetRef(systems.AddComponent<SimulationTimeControls>(), "host", host);
+            var switcher = systems.AddComponent<EnvironmentSwitcher>();
 
+            BuildInterior();
+
+            var externalView = new GameObject("ExternalView").AddComponent<ExternalView>();
+            SetRef(externalView, "host", host);
+
+            GameObject player = BuildPlayer();
+            GameObject missionControl = BuildMissionControl(host);
+
+            SetRef(switcher, "spacecraftRig", player);
+            SetRef(switcher, "missionControlRig", missionControl);
+            missionControl.SetActive(false);
+
+            EditorSceneManager.SaveScene(scene, ScenePath);
+            AssetDatabase.SaveAssets();
+            Debug.Log($"Apollo: built and saved {ScenePath}");
+        }
+
+        private static void BuildInterior()
+        {
             var spacecraft = new GameObject("Spacecraft");
             Material hull = MakeMaterial("Hull", new Color(0.75f, 0.77f, 0.8f));
             Material floor = MakeMaterial("Floor", new Color(0.3f, 0.32f, 0.36f));
@@ -30,10 +55,16 @@ namespace Apollo.EditorTools
             // Interior volume: 8 m long (x), 3 m high (y), 4 m wide (z). Walls are 0.2 m thick, outside the volume.
             Block(spacecraft, "Floor", new Vector3(0f, -0.1f, 0f), new Vector3(8.4f, 0.2f, 4.4f), floor);
             Block(spacecraft, "Ceiling", new Vector3(0f, 3.1f, 0f), new Vector3(8.4f, 0.2f, 4.4f), hull);
-            Block(spacecraft, "WallLeft", new Vector3(0f, 1.5f, -2.1f), new Vector3(8.4f, 3f, 0.2f), hull);
             Block(spacecraft, "WallRight", new Vector3(0f, 1.5f, 2.1f), new Vector3(8.4f, 3f, 0.2f), hull);
             Block(spacecraft, "WallFront", new Vector3(4.1f, 1.5f, 0f), new Vector3(0.2f, 3f, 4f), hull);
             Block(spacecraft, "WallBack", new Vector3(-4.1f, 1.5f, 0f), new Vector3(0.2f, 3f, 4f), hull);
+
+            // Left wall (z = -2.1) with a 2 m x 1.2 m window opening (x -1..1, y 1.1..2.3). Open hole, no glass yet.
+            // This wall faces Earth (nadir) in the fixed V1 attitude.
+            Block(spacecraft, "WallLeft_A", new Vector3(-2.6f, 1.5f, -2.1f), new Vector3(3.2f, 3f, 0.2f), hull);
+            Block(spacecraft, "WallLeft_B", new Vector3(2.6f, 1.5f, -2.1f), new Vector3(3.2f, 3f, 0.2f), hull);
+            Block(spacecraft, "WallLeft_Below", new Vector3(0f, 0.55f, -2.1f), new Vector3(2f, 1.1f, 0.2f), hull);
+            Block(spacecraft, "WallLeft_Above", new Vector3(0f, 2.65f, -2.1f), new Vector3(2f, 0.7f, 0.2f), hull);
 
             // Placeholder consoles so the room reads as one coherent space.
             Block(spacecraft, "ConsoleFront", new Vector3(3.5f, 0.6f, 0f), new Vector3(0.6f, 1.2f, 2.4f), panel);
@@ -42,7 +73,10 @@ namespace Apollo.EditorTools
 
             AddLight(spacecraft, new Vector3(-2f, 2.6f, 0f));
             AddLight(spacecraft, new Vector3(2f, 2.6f, 0f));
+        }
 
+        private static GameObject BuildPlayer()
+        {
             var player = new GameObject("Player");
             player.transform.position = new Vector3(-2.5f, 0.1f, 0f);
             var controller = player.AddComponent<CharacterController>();
@@ -54,12 +88,41 @@ namespace Apollo.EditorTools
             var cameraObject = new GameObject("PlayerCamera") { tag = "MainCamera" };
             cameraObject.transform.SetParent(player.transform, false);
             cameraObject.transform.localPosition = new Vector3(0f, 1.6f, 0f);
-            cameraObject.AddComponent<Camera>();
+            var camera = cameraObject.AddComponent<Camera>();
+            camera.nearClipPlane = 0.05f;
+            camera.farClipPlane = 20000f; // the scaled Earth and stars extend to ~14000 units
+            camera.clearFlags = CameraClearFlags.SolidColor;
+            camera.backgroundColor = Color.black;
             cameraObject.AddComponent<AudioListener>();
+            return player;
+        }
 
-            EditorSceneManager.SaveScene(scene, ScenePath);
-            AssetDatabase.SaveAssets();
-            Debug.Log($"Apollo: built and saved {ScenePath}");
+        private static GameObject BuildMissionControl(SimulationHost host)
+        {
+            // Placed far from the interior and beyond the player camera's far plane, so it is never visible from inside.
+            var rig = new GameObject("MissionControlRig");
+            rig.transform.position = new Vector3(100000f, 0f, 0f);
+            SetRef(rig.AddComponent<OrbitView>(), "host", host);
+
+            var cameraObject = new GameObject("MissionControlCamera");
+            cameraObject.transform.SetParent(rig.transform, false);
+            cameraObject.transform.localPosition = new Vector3(0f, 90f, -170f);
+            cameraObject.transform.LookAt(rig.transform.position);
+            var camera = cameraObject.AddComponent<Camera>();
+            camera.fieldOfView = 55f;
+            camera.nearClipPlane = 0.5f;
+            camera.farClipPlane = 2000f;
+            camera.clearFlags = CameraClearFlags.SolidColor;
+            camera.backgroundColor = Color.black;
+            cameraObject.AddComponent<AudioListener>();
+            return rig;
+        }
+
+        private static void SetRef(Object target, string field, Object value)
+        {
+            var serialized = new SerializedObject(target);
+            serialized.FindProperty(field).objectReferenceValue = value;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
         }
 
         private static void Block(GameObject parent, string name, Vector3 position, Vector3 scale, Material material)

@@ -18,3 +18,7 @@ Statuses: CONFIRMED (approved by owner), ASSUMPTION (working, can change), OPEN.
 | Input handling | ASSUMPTION | Direct Keyboard/Mouse polling via Input System package; no action asset yet |
 | Scene creation | ASSUMPTION | Editor menu Apollo > Build V1 Scene generates the blockout scene (no hand-authored scene YAML) |
 | Windows in interior | OPEN | Not in Step 3; best-effort later (needs scaled Earth camera) |
+| Spacecraft attitude (V1) | ASSUMPTION | Nadir-pointing, derived from orbit state each frame; window wall faces Earth |
+| Earth visuals | ASSUMPTION | Procedural noise texture, unlit; real texture can replace it later |
+| Environment switch | ASSUMPTION | Tab key, built in Step 4 to allow testing Mission Control early |
+| Look/walk controls | OPEN | Owner reports camera issue while walking; awaiting description |
