@@ -13,7 +13,7 @@ namespace Apollo.MissionControl
         [SerializeField] private float yaw;               // degrees
         [SerializeField] private float pitch = 28f;       // degrees above the equatorial plane
         [SerializeField] private float rotateSpeed = 0.25f;   // degrees per mouse pixel
-        [SerializeField] private float zoomSpeed = 0.0008f;   // fraction of distance per wheel unit
+        [SerializeField] private float zoomSpeed = 0.008f;   // fraction of distance per wheel unit
         [SerializeField] private float minDistance = 80f;
         [SerializeField] private float maxDistance = 600f;
 
