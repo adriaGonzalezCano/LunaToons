@@ -3,8 +3,15 @@
 Unity 6 LTS + URP prototype. Scope: spacecraft in Earth orbit (first-person interior) and a Mission Control view, both driven by one shared orbital simulation.
 
 ## Status
-- Step 1 (setup): repo skeleton only. The Unity project itself must be created in Unity Hub (see below).
-- Nothing else implemented or tested yet.
+- Step 1 (setup): done. Unity 6000.6.9f1 + URP project merged into this repo.
+- Step 2 (orbital sim): written; math cross-checked in Python (tools/validate_orbit.py); C# not yet run in Unity.
+- Step 3 (spacecraft interior, first-person): written, not yet run in Unity.
+- Next: Step 4 (Earth and orbit visualization).
+
+## Try it in Unity
+1. Open the project, wait for compilation (check the Console for errors and report them).
+2. Menu: Apollo > Build V1 Scene (creates and saves Assets/Scenes/V1.unity).
+3. Press Play: WASD to walk, mouse to look, Esc to free/lock the cursor. Top-left overlay shows live orbital values (temporary).
 
 ## Folder layout
 ```

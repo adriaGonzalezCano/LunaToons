@@ -13,4 +13,8 @@ Statuses: CONFIRMED (approved by owner), ASSUMPTION (working, can change), OPEN.
 | UI | ASSUMPTION | uGUI + TextMeshPro (verify available) |
 | Default orbit | ASSUMPTION | Circular, 185 km, 32.5 deg inclination |
 | Earth radius | ASSUMPTION | Mean sphere, 6,371,000 m |
-| Unity version / packages | OPEN | Awaiting user's installed version and manifest.json |
+| Unity version | OPEN | Project is on 6000.6.9f1 (URP 17.6.0, Input System 1.20.1, ugui 2.6.0, Rider 3.1.0). Brief says "Unity 6 LTS": owner to confirm 6000.6 is acceptable |
+| Player movement in V1 | ASSUMPTION | Walking with local artificial gravity (CharacterController); microgravity deferred |
+| Input handling | ASSUMPTION | Direct Keyboard/Mouse polling via Input System package; no action asset yet |
+| Scene creation | ASSUMPTION | Editor menu Apollo > Build V1 Scene generates the blockout scene (no hand-authored scene YAML) |
+| Windows in interior | OPEN | Not in Step 3; best-effort later (needs scaled Earth camera) |
