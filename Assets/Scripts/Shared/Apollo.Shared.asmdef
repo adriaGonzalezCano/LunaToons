@@ -2,7 +2,8 @@
     "name": "Apollo.Shared",
     "rootNamespace": "Apollo.Shared",
     "references": [
-        "Apollo.OrbitalSim"
+        "Apollo.OrbitalSim",
+        "Unity.InputSystem"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
