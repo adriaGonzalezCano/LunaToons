@@ -2,9 +2,11 @@ using UnityEngine;
 
 namespace Apollo.Shared
 {
-    /// <summary>Runtime helpers for placeholder visuals: unlit materials, a procedural Earth texture and a UV sphere mesh.</summary>
+    /// <summary>Runtime helpers for placeholder visuals: unlit materials, Earth map texture, sphere and quad meshes.</summary>
     public static class ViewFactory
     {
+        private static Texture2D cachedEarthMap;
+
         public static Material Unlit(Color color)
         {
             Shader shader = Shader.Find("Universal Render Pipeline/Unlit");
@@ -14,11 +16,44 @@ namespace Apollo.Shared
             return material;
         }
 
-        public static Material EarthMaterial()
+        /// <summary>Earth material for the UV sphere. Sphere u = 0 is longitude 0, the map's left edge is -180, hence the 0.5 offset.</summary>
+        public static Material EarthSphereMaterial()
         {
             Material material = Unlit(Color.white);
-            material.mainTexture = EarthTexture();
+            material.mainTexture = EarthMap();
+            material.mainTextureOffset = new Vector2(0.5f, 0f);
             return material;
+        }
+
+        /// <summary>Earth material for a flat equirectangular map (longitude -180 at the left edge, +180 at the right).</summary>
+        public static Material FlatMapMaterial()
+        {
+            Material material = Unlit(Color.white);
+            material.mainTexture = EarthMap();
+            return material;
+        }
+
+        /// <summary>
+        /// Equirectangular map, longitude -180..180 left to right, latitude -90..90 bottom to top.
+        /// To use a real map, put a texture named EarthMap (standard equirectangular layout) in a Resources folder
+        /// (Assets/Resources/EarthMap.png). Otherwise a procedural placeholder is generated.
+        /// </summary>
+        public static Texture2D EarthMap()
+        {
+            if (cachedEarthMap != null) return cachedEarthMap;
+
+            var imported = Resources.Load<Texture2D>("EarthMap");
+            if (imported != null)
+            {
+                imported.wrapModeU = TextureWrapMode.Repeat;
+                imported.wrapModeV = TextureWrapMode.Clamp;
+                cachedEarthMap = imported;
+            }
+            else
+            {
+                cachedEarthMap = ProceduralEarthMap();
+            }
+            return cachedEarthMap;
         }
 
         /// <summary>Unit-diameter UV sphere (radius 0.5), north pole on +Y. Scale the transform by the desired diameter.</summary>
@@ -60,6 +95,21 @@ namespace Apollo.Shared
             return mesh;
         }
 
+        /// <summary>Unit quad in the XY plane facing -Z (seen from a camera at negative Z looking toward +Z), UV 0..1.</summary>
+        public static Mesh CreateQuadMesh()
+        {
+            var mesh = new Mesh
+            {
+                name = "Quad",
+                vertices = new[] { new Vector3(-0.5f, -0.5f, 0f), new Vector3(0.5f, -0.5f, 0f), new Vector3(-0.5f, 0.5f, 0f), new Vector3(0.5f, 0.5f, 0f) },
+                uv = new[] { new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0f, 1f), new Vector2(1f, 1f) },
+                triangles = new[] { 0, 2, 3, 0, 3, 1 }
+            };
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            return mesh;
+        }
+
         public static GameObject CreateMeshObject(string name, Transform parent, Mesh mesh, Material material, float diameter, Vector3 localPosition)
         {
             var go = new GameObject(name);
@@ -72,12 +122,12 @@ namespace Apollo.Shared
         }
 
         // Procedural placeholder Earth (noise continents). No real map data: for orientation and motion cues only.
-        private static Texture2D EarthTexture()
+        private static Texture2D ProceduralEarthMap()
         {
             const int width = 512, height = 256;
             var pixels = new Color[width * height];
-            var ocean = new Color(0.05f, 0.2f, 0.5f);
             var deepOcean = new Color(0.02f, 0.1f, 0.35f);
+            var ocean = new Color(0.05f, 0.2f, 0.5f);
             var green = new Color(0.2f, 0.5f, 0.2f);
             var brown = new Color(0.5f, 0.42f, 0.28f);
 
@@ -87,7 +137,7 @@ namespace Apollo.Shared
                 float cl = Mathf.Cos(lat), sl = Mathf.Sin(lat);
                 for (int x = 0; x < width; x++)
                 {
-                    float lon = (x + 0.5f) / width * 2f * Mathf.PI;
+                    float lon = (x + 0.5f) / width * 2f * Mathf.PI - Mathf.PI; // -pi at the left edge
                     float px = cl * Mathf.Cos(lon), py = sl, pz = cl * Mathf.Sin(lon);
                     float n = Noise3(px, py, pz, 2f) * 0.65f + Noise3(px, py, pz, 5f) * 0.35f;
 

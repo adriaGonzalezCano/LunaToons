@@ -4,14 +4,15 @@ Unity 6 LTS + URP prototype. Scope: spacecraft in Earth orbit (first-person inte
 
 ## Status
 - Steps 1-4 done and confirmed running in Unity.
-- Steps 5-6 written, not yet run in Unity: Mission Control telemetry panel, simulation checks menu, validation checklist (docs/VALIDATION.md).
+- Steps 5-6 confirmed by owner: Mission Control telemetry panel, simulation checks menu, validation checklist (docs/VALIDATION.md).
+- Extras before closing V1 (written, not yet run in Unity): Earth rotation, orbit camera, Control Center 2 ground-track map, Apollo-inspired interior.
 - V1 is complete when docs/VALIDATION.md passes in Unity.
 
 ## Try it in Unity
 1. Open the project and check the Console for compile errors.
 2. Menu: Apollo > Run Simulation Checks (expect all PASS in the Console).
 3. Menu: Apollo > Build V1 Scene (regenerates and overwrites Assets/Scenes/V1.unity).
-4. Play: WASD walk, mouse look, Esc free/lock cursor, Tab spacecraft/Mission Control, 1-4 time x1/10/100/1000, P pause.
+4. Play: WASD walk, mouse look, Esc free/lock cursor, Tab cycles Spacecraft / Control Center 1 (3D orbit, drag to rotate, wheel to zoom) / Control Center 2 (flat map with ground track), F1-F3 jump directly, 1-4 time x1/10/100/1000, P pause.
 
 ## Folder layout
 ```

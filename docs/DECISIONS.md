@@ -24,3 +24,9 @@ Statuses: CONFIRMED (approved by owner), ASSUMPTION (working, can change), OPEN.
 | Look/walk controls | RESOLVED | Owner confirmed controls work after Step 4 fixes; cause of earlier report not identified |
 | Telemetry set | ASSUMPTION | MET, orbit #, altitude, speed, period, inclination, eccentricity, apsis altitudes, semi-major axis, latitude, ECI position and velocity. No longitude or ground track (Earth rotation not modeled) |
 | Temporary UI | ASSUMPTION | Debug overlay and mouse diagnostic removed; small controls hint (IMGUI) kept as placeholder |
+| Earth rotation | ASSUMPTION | Sidereal rate, angle 0 at MET 0, spherical Earth; orbit remains inertial (no J2) |
+| Control Center 1 view control | ASSUMPTION | Mouse drag orbits the view, wheel zooms (owner request: rotate Earth in control center) |
+| Control Center 2 | ASSUMPTION | Flat equirectangular map, past track (1 orbit back, clamped at MET 0) and predicted track (1.5 orbits) from the analytic orbit |
+| View switching keys | ASSUMPTION | Tab cycles Spacecraft, CC1, CC2; F1/F2/F3 jump directly |
+| Interior style | ASSUMPTION | Command-Module-inspired cabin from primitives (3 couches, instrument panel, hatch, framed window); still a blockout, not accurate to Apollo |
+| Real Earth map | OPEN | Placeholder procedural map; drop an equirectangular image at Assets/Resources/EarthMap.png to replace it |

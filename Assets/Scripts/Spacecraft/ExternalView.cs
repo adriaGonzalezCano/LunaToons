@@ -1,3 +1,4 @@
+using Apollo.OrbitalSim;
 using Apollo.Shared;
 using UnityEngine;
 
@@ -25,9 +26,9 @@ namespace Apollo.Spacecraft
             root = new GameObject("ExternalWorld").transform;
             root.SetParent(transform, false);
 
-            float earthDiameter = (float)(2.0 * Apollo.OrbitalSim.KeplerOrbit.EarthRadius / metersPerUnit);
+            float earthDiameter = (float)(2.0 * KeplerOrbit.EarthRadius / metersPerUnit);
             Mesh highResSphere = ViewFactory.CreateSphereMesh(128, 64); // fine mesh: the surface is only ~185 units away
-            earth = ViewFactory.CreateMeshObject("Earth", root, highResSphere, ViewFactory.EarthMaterial(), earthDiameter, Vector3.zero).transform;
+            earth = ViewFactory.CreateMeshObject("Earth", root, highResSphere, ViewFactory.EarthSphereMaterial(), earthDiameter, Vector3.zero).transform;
 
             BuildStars();
         }
@@ -48,6 +49,9 @@ namespace Apollo.Spacecraft
             // Rotate the outside world by the inverse attitude instead of rotating the interior.
             root.localRotation = Quaternion.Inverse(craftAttitude);
             earth.localPosition = -r / metersPerUnit;
+
+            // Earth rotates under the inertial orbit. ECI rotation +theta about Z = Unity rotation -theta about Y (axis mapping flips handedness).
+            earth.localRotation = Quaternion.Euler(0f, (float)(-EarthRotation.Angle(state.MissionElapsedTime) * Mathf.Rad2Deg), 0f);
         }
 
         private void BuildStars()

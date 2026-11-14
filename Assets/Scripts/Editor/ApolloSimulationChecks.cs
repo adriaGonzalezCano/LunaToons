@@ -22,6 +22,7 @@ namespace Apollo.EditorTools
 
             CheckCircular();
             CheckElliptical(KeplerOrbit.EarthRadius + 0.0, 12_000_000.0, 0.3, 51.6);
+            CheckEarthRotation();
             CheckClock();
             CheckViewMapping();
 
@@ -88,6 +89,25 @@ namespace Apollo.EditorTools
 
             double visViva = Math.Sqrt(KeplerOrbit.MuEarth * (2 / start.Position.Magnitude - 1 / semiMajorAxis));
             Expect("Elliptical: speed satisfies vis-viva", Math.Abs(visViva - start.Speed) < 1e-6);
+        }
+
+        private static void CheckEarthRotation()
+        {
+            // Orbit starts at the ascending node on the +X axis: lat 0, lon 0 at MET 0 (rotation angle at epoch is 0).
+            var orbit = KeplerOrbit.Circular(185_000.0, 32.5);
+            GeoPoint start = EarthRotation.SubPoint(orbit.Propagate(0).Position, 0);
+            Expect("Earth rotation: start point is lat 0, lon 0",
+                   Math.Abs(start.LatitudeRad) < 1e-9 && Math.Abs(start.LongitudeRad) < 1e-9);
+
+            // After one orbit the inertial position repeats but the Earth has turned: track shifts west by omega * period.
+            GeoPoint afterOrbit = EarthRotation.SubPoint(orbit.Propagate(orbit.Period).Position, orbit.Period);
+            double expected = -EarthRotation.AngularVelocity * orbit.Period;
+            Expect($"Earth rotation: ground track shifts west {Math.Abs(expected) * 180.0 / Math.PI:F2} deg per orbit",
+                   Math.Abs(afterOrbit.LongitudeRad - expected) < 1e-9 && Math.Abs(afterOrbit.LatitudeRad) < 1e-9);
+
+            double siderealDay = 2 * Math.PI / EarthRotation.AngularVelocity;
+            Expect($"Earth rotation: one full turn per sidereal day ({siderealDay:F1} s)",
+                   Math.Abs(EarthRotation.Angle(siderealDay)) < 1e-9);
         }
 
         private static void CheckClock()

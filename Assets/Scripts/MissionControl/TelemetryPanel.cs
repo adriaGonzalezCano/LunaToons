@@ -13,6 +13,7 @@ namespace Apollo.MissionControl
     public sealed class TelemetryPanel : MonoBehaviour
     {
         [SerializeField] private SimulationHost host;
+        [SerializeField] private bool compact; // two-line strip at the bottom of the screen (used over the flat map)
 
         private Text label;
 
@@ -25,14 +26,14 @@ namespace Apollo.MissionControl
         private void Update()
         {
             if (host == null || host.Orbit == null || label == null) return;
-            label.text = Format(host.CurrentState, host.Orbit, host.Clock);
+            label.text = compact ? FormatCompact(host.CurrentState, host.Clock) : Format(host.CurrentState, host.Orbit, host.Clock);
         }
 
         private static string Format(OrbitalState s, KeplerOrbit orbit, SimulationClock clock)
         {
             TimeSpan met = TimeSpan.FromSeconds(s.MissionElapsedTime);
             int orbitNumber = (int)Math.Floor(s.MissionElapsedTime / s.Period) + 1;
-            double latitudeDeg = Math.Asin(s.Position.Z / s.Position.Magnitude) * 180.0 / Math.PI;
+            GeoPoint ground = EarthRotation.SubPoint(s.Position, s.MissionElapsedTime);
             string timeScale = clock.IsPaused ? "PAUSED" : $"x{clock.TimeScale:0.#}";
 
             return
@@ -48,9 +49,21 @@ namespace Apollo.MissionControl
                 $"Periapsis alt  {orbit.PeriapsisAltitude / 1000.0,10:F1} km\n" +
                 $"Apoapsis alt   {orbit.ApoapsisAltitude / 1000.0,10:F1} km\n" +
                 $"Semi-major ax  {orbit.SemiMajorAxis / 1000.0,10:F1} km\n" +
-                $"Latitude       {latitudeDeg,10:F2} deg\n" +
+                $"Latitude       {ground.LatitudeDeg,10:F2} deg\n" +
+                $"Longitude      {ground.LongitudeDeg,10:F2} deg\n" +
                 $"Pos ECI (km)   {s.Position.X / 1000.0,9:F0} {s.Position.Y / 1000.0,9:F0} {s.Position.Z / 1000.0,9:F0}\n" +
                 $"Vel ECI (m/s)  {s.Velocity.X,9:F0} {s.Velocity.Y,9:F0} {s.Velocity.Z,9:F0}";
+        }
+
+
+        private static string FormatCompact(OrbitalState s, SimulationClock clock)
+        {
+            TimeSpan met = TimeSpan.FromSeconds(s.MissionElapsedTime);
+            GeoPoint ground = EarthRotation.SubPoint(s.Position, s.MissionElapsedTime);
+            string timeScale = clock.IsPaused ? "PAUSED" : $"x{clock.TimeScale:0.#}";
+            return
+                $"MET {(int)met.TotalHours:000}:{met.Minutes:00}:{met.Seconds:00} ({timeScale})   Altitude {s.Altitude / 1000.0:F3} km   Speed {s.Speed:F1} m/s\n" +
+                $"Ground point: lat {ground.LatitudeDeg,7:F2} deg   lon {ground.LongitudeDeg,8:F2} deg   | cyan: past track, yellow: predicted, red: spacecraft";
         }
 
         private void Build()
@@ -67,9 +80,18 @@ namespace Apollo.MissionControl
             var panel = new GameObject("Panel", typeof(RectTransform), typeof(Image));
             panel.transform.SetParent(canvasObject.transform, false);
             var panelRect = (RectTransform)panel.transform;
-            panelRect.anchorMin = panelRect.anchorMax = panelRect.pivot = new Vector2(0f, 1f);
-            panelRect.anchoredPosition = new Vector2(20f, -20f);
-            panelRect.sizeDelta = new Vector2(640f, 470f);
+            if (compact)
+            {
+                panelRect.anchorMin = panelRect.anchorMax = panelRect.pivot = new Vector2(0.5f, 0f);
+                panelRect.anchoredPosition = new Vector2(0f, 20f);
+                panelRect.sizeDelta = new Vector2(1860f, 110f);
+            }
+            else
+            {
+                panelRect.anchorMin = panelRect.anchorMax = panelRect.pivot = new Vector2(0f, 1f);
+                panelRect.anchoredPosition = new Vector2(20f, -20f);
+                panelRect.sizeDelta = new Vector2(640f, 500f);
+            }
             panel.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.7f);
 
             var textObject = new GameObject("Text", typeof(RectTransform), typeof(Text));
@@ -82,7 +104,7 @@ namespace Apollo.MissionControl
 
             label = textObject.GetComponent<Text>();
             label.font = Font.CreateDynamicFontFromOSFont(new[] { "Consolas", "Menlo", "Courier New", "Liberation Mono", "Arial" }, 24);
-            label.fontSize = 24;
+            label.fontSize = compact ? 26 : 24;
             label.color = new Color(0.6f, 1f, 0.7f);
             label.alignment = TextAnchor.UpperLeft;
             label.horizontalOverflow = HorizontalWrapMode.Overflow;

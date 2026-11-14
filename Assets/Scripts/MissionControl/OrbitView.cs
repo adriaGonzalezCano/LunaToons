@@ -15,13 +15,14 @@ namespace Apollo.MissionControl
         [SerializeField] private int trajectorySamples = 256;
 
         private Transform marker;
+        private Transform earth;
 
         private void Start()
         {
             if (host == null) host = FindFirstObjectByType<SimulationHost>();
 
             float earthDiameter = (float)(2.0 * KeplerOrbit.EarthRadius / metersPerUnit);
-            ViewFactory.CreateMeshObject("Earth", transform, ViewFactory.CreateSphereMesh(64, 32), ViewFactory.EarthMaterial(), earthDiameter, Vector3.zero);
+            earth = ViewFactory.CreateMeshObject("Earth", transform, ViewFactory.CreateSphereMesh(64, 32), ViewFactory.EarthSphereMaterial(), earthDiameter, Vector3.zero).transform;
 
             marker = ViewFactory.CreateMeshObject("Spacecraft", transform, ViewFactory.CreateSphereMesh(12, 8), ViewFactory.Unlit(Color.red), 3f, Vector3.zero).transform;
 
@@ -30,8 +31,10 @@ namespace Apollo.MissionControl
 
         private void Update()
         {
-            if (host == null || host.Orbit == null || marker == null) return;
-            marker.localPosition = ViewMapping.ToUnity(host.CurrentState.Position, metersPerUnit);
+            if (host == null || host.Orbit == null || marker == null || earth == null) return;
+            var state = host.CurrentState;
+            marker.localPosition = ViewMapping.ToUnity(state.Position, metersPerUnit);
+            earth.localRotation = Quaternion.Euler(0f, (float)(-EarthRotation.Angle(state.MissionElapsedTime) * Mathf.Rad2Deg), 0f);
         }
 
         private void BuildTrajectory()
