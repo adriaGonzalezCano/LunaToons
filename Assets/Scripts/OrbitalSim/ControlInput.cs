@@ -3,7 +3,7 @@ namespace Apollo.OrbitalSim
     /// <summary>
     /// What the pilot is commanding, independent of keys and of Unity. Axis values are -1..1.
     /// Attitude: Pitch +1 = nose up, Yaw +1 = nose right, Roll +1 = roll right (right side down).
-    /// Translation (body axes, used from V2 step 4): X +1 = forward (main engine), Y +1 = right, Z +1 = up.
+    /// Translation (used from V2 step 4): X +1 = forward (main engine), Y +1 = right, Z +1 = up (the sim applies the sign for body +Y = left).
     /// </summary>
     public struct ControlInput
     {

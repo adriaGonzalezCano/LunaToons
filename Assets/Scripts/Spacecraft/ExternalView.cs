@@ -8,7 +8,7 @@ namespace Apollo.Spacecraft
     /// What the crew sees outside: Earth and stars, driven by the shared simulation state.
     /// The interior stays at the origin at 1:1 scale. The outside world is uniformly scaled by 1/metersPerUnit
     /// around the camera, which keeps all viewing angles correct while avoiding float precision problems.
-    /// Spacecraft attitude (V1, fixed): +X along velocity, -Z toward Earth (the window wall faces Earth), Y = orbit normal.
+    /// Spacecraft attitude comes from the simulation (ViewMapping.CabinToWorld); at the start the window wall faces Earth.
     /// </summary>
     public sealed class ExternalView : MonoBehaviour
     {
@@ -39,12 +39,8 @@ namespace Apollo.Spacecraft
             var state = host.CurrentState;
 
             Vector3 r = ViewMapping.ToUnity(state.Position);
-            Vector3 v = ViewMapping.ToUnity(state.Velocity);
 
-            Vector3 zc = r.normalized;                                  // craft +Z: away from Earth
-            Vector3 xc = (v - Vector3.Dot(v, zc) * zc).normalized;     // craft +X: along velocity
-            Vector3 yc = Vector3.Cross(zc, xc);                         // craft +Y: orbit normal
-            Quaternion craftAttitude = Quaternion.LookRotation(zc, yc);
+            Quaternion craftAttitude = ViewMapping.CabinToWorld(host.Attitude.Attitude);
 
             // Rotate the outside world by the inverse attitude instead of rotating the interior.
             root.localRotation = Quaternion.Inverse(craftAttitude);

@@ -314,11 +314,16 @@ namespace Apollo.EditorTools
             Vector3d z = sim.Attitude.Attitude.Rotate(new Vector3d(0, 0, 1));
             Vector3d vHat = sim.State.Velocity * (1.0 / sim.State.Speed);
             Vector3d rHat = sim.State.Position * (1.0 / sim.State.Position.Magnitude);
-            Expect("Attitude: starts with +X along the velocity, +Z radial, right-handed (X x Y = Z)",
-                   (x - vHat).Magnitude < 1e-9 && (z - rHat).Magnitude < 1e-9 && (Vector3d.Cross(x, y) - z).Magnitude < 1e-9);
+            Expect("Attitude: starts with +X along the velocity, +Y (cabin left) radial away from Earth, right-handed (X x Y = Z)",
+                   (x - vHat).Magnitude < 1e-9 && (y - rHat).Magnitude < 1e-9 && (Vector3d.Cross(x, y) - z).Magnitude < 1e-9);
+            Quaternion cabin = ViewMapping.CabinToWorld(sim.Attitude.Attitude);
+            Expect("View: cabin forward is the velocity direction and the window wall (cabin -Z) faces Earth at the start",
+                   (cabin * Vector3.right - ViewMapping.ToUnity(vHat)).magnitude < 1e-5 &&
+                   (cabin * Vector3.back - ViewMapping.ToUnity(rHat * -1.0)).magnitude < 1e-5 &&
+                   (cabin * Vector3.up - ViewMapping.ToUnity(z)).magnitude < 1e-5);
             Expect("Attitude: no controls, no rotation, no warp lockout", !sim.ControlsActive && sim.Attitude.Rate.Magnitude == 0.0);
 
-            // Sign conventions: pitch +1 = nose up (rate about -Y), yaw +1 = nose right (+Z), roll +1 = roll right (-X).
+            // Sign conventions (body: X forward, Y left, Z up): pitch +1 = nose up (about -Y), yaw +1 = nose right (about -Z), roll +1 = roll right (about +X).
             double alpha = SpacecraftSimulation.MaxAngularAcceleration;
             ControlInput Cmd(double pitch, double yaw, double roll) => new ControlInput { Pitch = pitch, Yaw = yaw, Roll = roll };
             sim.SetControls(Cmd(1, 0, 0)); sim.Advance(1.0);
@@ -326,10 +331,10 @@ namespace Apollo.EditorTools
             Expect($"Attitude: pitch +1 gives nose-up rate ({sim.Attitude.Rate.Y * 180.0 / Math.PI:F3} deg/s about Y)", sim.Attitude.Rate.Y < 0 && Math.Abs(sim.Attitude.Rate.Y + alpha) < 1e-9);
             sim.Reset();
             sim.SetControls(Cmd(0, 1, 0)); sim.Advance(1.0);
-            Expect("Attitude: yaw +1 gives rate about +Z", sim.Attitude.Rate.Z > 0 && Math.Abs(sim.Attitude.Rate.Z - alpha) < 1e-9);
+            Expect("Attitude: yaw +1 (nose right) gives rate about -Z (Y is the left side)", sim.Attitude.Rate.Z < 0 && Math.Abs(sim.Attitude.Rate.Z + alpha) < 1e-9);
             sim.Reset();
             sim.SetControls(Cmd(0, 0, 1)); sim.Advance(1.0);
-            Expect("Attitude: roll +1 gives rate about -X", sim.Attitude.Rate.X < 0 && Math.Abs(sim.Attitude.Rate.X + alpha) < 1e-9);
+            Expect("Attitude: roll +1 (roll right) gives rate about +X", sim.Attitude.Rate.X > 0 && Math.Abs(sim.Attitude.Rate.X - alpha) < 1e-9);
 
             // Frame-rate independence of a 5 s command followed by 100 s of coasting.
             RigidBodyAttitude Run(double frame)

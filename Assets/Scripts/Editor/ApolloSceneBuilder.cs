@@ -27,6 +27,7 @@ namespace Apollo.EditorTools
             var host = systems.AddComponent<SimulationHost>();
             SetRef(systems.AddComponent<SimulationTimeControls>(), "host", host);
             SetRef(systems.AddComponent<ThrustControls>(), "host", host);
+            SetRef(systems.AddComponent<AttitudeTestControls>(), "host", host);
             var switcher = systems.AddComponent<EnvironmentSwitcher>();
 
             ApolloInteriorBuilder.Build();

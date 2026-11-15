@@ -5,7 +5,7 @@ namespace Apollo.OrbitalSim
     /// <summary>
     /// Attitude of a rigid body: quaternion (body to inertial) and body-frame angular rate, advanced with Euler's equations
     /// I dw/dt = torque - w x (I w) using the fixed-step RK8 integrator. Without torque the angular momentum is conserved and a
-    /// rotation persists. Body axes: +X forward (main engine), +Y right, +Z up; roll about X, pitch about Y, yaw about Z.
+    /// rotation persists. Body axes match the cabin: +X forward (the way the couches face, main engine), +Y left, +Z up (right-handed); roll about X, pitch about Y, yaw about Z.
     /// Pure C#, deterministic: callers advance it in fixed steps.
     /// </summary>
     public sealed class RigidBodyAttitude

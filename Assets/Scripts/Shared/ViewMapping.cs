@@ -13,5 +13,16 @@ namespace Apollo.Shared
         {
             return new Vector3((float)(eci.X / metersPerUnit), (float)(eci.Z / metersPerUnit), (float)(eci.Y / metersPerUnit));
         }
+
+        /// <summary>
+        /// Orientation of the cabin (and of any object attached to the spacecraft) in Unity world space, from the simulated attitude.
+        /// Body axes match the cabin: body +X = cabin +X (forward, couches face it), body +Y (left) = cabin +Z, body +Z (up) = cabin +Y.
+        /// </summary>
+        public static Quaternion CabinToWorld(Quaterniond attitude)
+        {
+            Vector3 cabinForwardZ = ToUnity(attitude.Rotate(new Vector3d(0, 1, 0)));
+            Vector3 cabinUpY = ToUnity(attitude.Rotate(new Vector3d(0, 0, 1)));
+            return Quaternion.LookRotation(cabinForwardZ, cabinUpY);
+        }
     }
 }

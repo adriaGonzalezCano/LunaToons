@@ -168,21 +168,24 @@ namespace Apollo.OrbitalSim
             if (Controls.StopRotation)
                 torque = Attitude.StopRotationTorque(a);
             else
-                torque = new Vector3d(-Controls.Roll * a * inertia.X, -Controls.Pitch * a * inertia.Y, Controls.Yaw * a * inertia.Z);
+                torque = new Vector3d(Controls.Roll * a * inertia.X, -Controls.Pitch * a * inertia.Y, -Controls.Yaw * a * inertia.Z);
 
             Attitude.SetTorque(torque);
             Attitude.Step(step);
             if (Controls.StopRotation) Attitude.SnapToRest();
         }
 
-        /// <summary>Starting attitude: +X along the velocity, +Z away from Earth (radial), +Y completes the right-handed set.</summary>
+        /// <summary>
+        /// Starting attitude: +X (forward, the way the couches face) along the velocity, +Y (left side of the cabin) away from
+        /// Earth, so the window on the right-hand wall looks down at Earth; +Z (up) = X x Y completes the right-handed set.
+        /// </summary>
         private static Quaterniond InitialAttitude(OrbitalState state)
         {
             Vector3d x = state.Velocity * (1.0 / state.Velocity.Magnitude);
             Vector3d radial = state.Position * (1.0 / state.Position.Magnitude);
-            Vector3d z = radial - x * Vector3d.Dot(radial, x);
-            z = z * (1.0 / z.Magnitude);
-            Vector3d y = Vector3d.Cross(z, x);
+            Vector3d y = radial - x * Vector3d.Dot(radial, x);
+            y = y * (1.0 / y.Magnitude);
+            Vector3d z = Vector3d.Cross(x, y);
             return Quaterniond.FromBasis(x, y, z);
         }
 
