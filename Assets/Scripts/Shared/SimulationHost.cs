@@ -54,13 +54,6 @@ namespace Apollo.Shared
         public void SetTimeScale(double scale) => simulation.Clock.SetTimeScale(scale);
         public void SetPaused(bool paused) => simulation.Clock.SetPaused(paused);
 
-        /// <summary>Engine on/off (thrust 1 or 0). Starting a burn drops time-warp to x1.</summary>
-        public void SetThrust(bool on, bool retrograde = false)
-        {
-            if ((on || simulation.ControlsActive) && simulation.Clock.TimeScale > 1.0) simulation.Clock.SetTimeScale(1.0);
-            simulation.SetThrust(on, retrograde);
-        }
-
         public bool ApplyProgradeVelocityChange(double deltaSpeed) => simulation.ApplyProgradeVelocityChange(deltaSpeed);
 
         public void Restart(string reason)

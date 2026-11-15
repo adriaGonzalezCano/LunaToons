@@ -34,6 +34,14 @@ namespace Apollo.OrbitalSim
             return new Quaterniond(Math.Cos(angle / 2), axis.X * s, axis.Y * s, axis.Z * s);
         }
 
+        /// <summary>Rotation by the vector's length (radians) about its direction. The zero vector gives the identity.</summary>
+        public static Quaterniond FromRotationVector(Vector3d v)
+        {
+            double angle = v.Magnitude;
+            if (angle < 1e-15) return Identity;
+            return FromAxisAngle(v, angle);
+        }
+
         /// <summary>Rotation whose columns are the given orthonormal, right-handed body axes expressed in the inertial frame.</summary>
         public static Quaterniond FromBasis(Vector3d x, Vector3d y, Vector3d z)
         {

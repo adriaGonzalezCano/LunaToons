@@ -30,7 +30,7 @@ Expected result: "Apollo simulation checks: N passed, 0 failed." (N is the numbe
 11. Window view: ground below moves and its direction is consistent with the Earth rotation (the Earth turns eastward under the spacecraft path).
 12. Interior: three couches face the dark instrument panel, indicator lights glow, the round hatch is at the back, and you can walk along both side aisles to the panel without getting stuck.
 
-13. Burn (V2): rebuild the scene (Apollo > Build V1 Scene), press Play, hold T: Engine ON, Delta-v used grows at 3 m/s per second, apoapsis rises live and the yellow orbit ring and cyan/yellow ground tracks update each frame; release T: Engine OFF and orbit elements freeze. Shift+T lowers the periapsis; below 100 km the simulation restarts. Holding T for ~18 min cuts the engine (escape).
+13. Thrust (V2 step 4): rebuild the scene, press Play. T = thrust forward along the ship's nose (+X), Shift+T = backward, J/L = left/right, U/N = up/down; each is 3 m/s^2 along the ship's own axes and follows the attitude (turn with the arrows first, then thrust: the orbit changes in the direction the nose points, not along the velocity). Telemetry shows Engine ON and Delta-v used; the orbit ring and ground tracks update live; releasing the keys leaves a stable coast. Backward thrust lowers the periapsis; below 100 km the simulation restarts. Starting from a high-energy orbit the thrusters cut off before the orbit becomes unbound (release and press again).
 
 ## Structural guarantees (by design, not by test)
 - One `SimulationHost` on an always-active object. Tab only toggles the two rigs; it never touches the host.

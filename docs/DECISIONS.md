@@ -39,5 +39,5 @@ Statuses: CONFIRMED (approved by owner), ASSUMPTION (working, can change), OPEN.
 | V2 time warp | CONFIRMED | Auto-drop to x1 while engine or controls active |
 | Periapsis below surface | ASSUMPTION | CoastOrbit allows it (a burn can create it); the simulation restarts before the craft reaches the low altitude |
 | V2 burn control | CONFIRMED | Hold T = burn (thrust 1), release = coast (thrust 0); max thrust adjustable later |
-| V2 burn direction (placeholder) | ASSUMPTION | Along the velocity (Shift+T against it) until attitude exists; thrust acceleration 3.0 m/s^2 default |
-| V2 burn cutoff on escape | ASSUMPTION | Engine cuts itself if the burn would make the orbit unbound (CoastOrbit is elliptical only); T must be released and pressed again |
+| V2 thrust | ASSUMPTION | Six translation thrusters along the body axes (forward/back, left/right, up/down), thrust 1 or 0 each at 3.0 m/s^2 (same for all axes for now), direction follows the attitude (mid-step attitude), per-axis thrust adds; no propellant yet |
+| V2 burn cutoff on escape | ASSUMPTION | Thrusters cut off if a burn would make the orbit unbound (CoastOrbit is elliptical only); the translation command must be released and re-issued |

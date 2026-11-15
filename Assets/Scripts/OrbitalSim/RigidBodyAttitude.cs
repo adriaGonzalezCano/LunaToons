@@ -44,6 +44,9 @@ namespace Apollo.OrbitalSim
         public double RotationalEnergy =>
             0.5 * (Inertia.X * Rate.X * Rate.X + Inertia.Y * Rate.Y * Rate.Y + Inertia.Z * Rate.Z * Rate.Z);
 
+        /// <summary>Attitude after dt seconds at the current rate, ignoring torque. For dt small compared with the rotation period.</summary>
+        public Quaterniond AttitudeAfter(double dt) => Attitude * Quaterniond.FromRotationVector(Rate * dt);
+
         /// <summary>Body torque (N m) applied during the following steps.</summary>
         public void SetTorque(Vector3d bodyTorque) => torque = bodyTorque;
 

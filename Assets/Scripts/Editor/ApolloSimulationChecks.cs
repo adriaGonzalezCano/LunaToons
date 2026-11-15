@@ -200,15 +200,18 @@ namespace Apollo.EditorTools
 
         private static void CheckPoweredFlight()
         {
-            // 20 s prograde burn at 3 m/s^2 (default orbit). Python port (tools/validate_burn.py): delta-v 60 m/s, apoapsis 390.74 km
-            // (impulsive 60 m/s: 390.75 km), frame-rate differences about 1e-8 m.
+            // Thrust acts along the ship's +X axis, which starts along the velocity and then stays fixed (attitude hold).
+            // Python port (tools/validate_burn.py, test 7): 20 s at 3 m/s^2 gives delta-v 60 m/s, periapsis 184.998 km, apoapsis 390.728 km;
+            // 10 s backward gives periapsis 85.068 km, apoapsis 185.000 km.
+            ControlInput Forward(double x) => new ControlInput { TranslateX = x };
+
             SpacecraftSimulation Burn(double frameSeconds)
             {
                 var sim = new SpacecraftSimulation(KeplerOrbit.Circular(185_000.0, 32.5), 100_000.0);
-                sim.SetThrust(true);
+                sim.SetControls(Forward(1));
                 int frames = (int)Math.Round(20.0 / frameSeconds);
                 for (int i = 0; i < frames; i++) sim.Advance(frameSeconds);
-                sim.SetThrust(false);
+                sim.SetControls(ControlInput.None);
                 return sim;
             }
 
@@ -216,8 +219,8 @@ namespace Apollo.EditorTools
             SpacecraftSimulation b = Burn(1.0 / 144.0);
             SpacecraftSimulation c = Burn(1.0 / 30.0);
             Expect($"Burn: delta-v spent {a.DeltaVUsed:F6} m/s equals thrust x time (60 m/s)", Math.Abs(a.DeltaVUsed - 60.0) < 1e-6);
-            Expect($"Burn: apoapsis {a.Orbit.ApoapsisAltitude / 1000.0:F2} km matches the impulsive prediction (390.75 km), periapsis {a.Orbit.PeriapsisAltitude / 1000.0:F2} km stays 185 km",
-                   Math.Abs(a.Orbit.ApoapsisAltitude - 390_750.0) < 1_000.0 && Math.Abs(a.Orbit.PeriapsisAltitude - 185_000.0) < 500.0);
+            Expect($"Burn: apoapsis {a.Orbit.ApoapsisAltitude / 1000.0:F2} km (390.73) and periapsis {a.Orbit.PeriapsisAltitude / 1000.0:F2} km (185.00) match the reference",
+                   Math.Abs(a.Orbit.ApoapsisAltitude - 390_728.0) < 300.0 && Math.Abs(a.Orbit.PeriapsisAltitude - 184_998.0) < 300.0);
             Expect($"Burn: result independent of frame rate (60 vs 144 fps: {(a.State.Position - b.State.Position).Magnitude:E1} m; 60 vs 30 fps: {(a.State.Position - c.State.Position).Magnitude:E1} m)",
                    (a.State.Position - b.State.Position).Magnitude < 1e-3 && (a.State.Position - c.State.Position).Magnitude < 1e-3
                    && (a.State.Velocity - b.State.Velocity).Magnitude < 1e-6);
@@ -230,21 +233,65 @@ namespace Apollo.EditorTools
             Expect("Burn: coast after release is continuous with the burn-end state",
                    (a.State.Position - a.Orbit.Propagate(t + 1.0).Position).Magnitude < 1e-6 && (a.State.Position - end.Position).Magnitude < 8_100.0);
 
-            // Retrograde: 10 s lowers the periapsis (about 85 km), apoapsis unchanged.
+            // Backward burn: 10 s lowers the periapsis (about 85 km), apoapsis unchanged.
             var retro = new SpacecraftSimulation(KeplerOrbit.Circular(185_000.0, 32.5), 100_000.0);
-            retro.SetThrust(true, true);
+            retro.SetControls(Forward(-1));
             for (int i = 0; i < 600; i++) retro.Advance(1.0 / 60.0);
-            retro.SetThrust(false);
-            Expect($"Burn: 10 s retrograde gives periapsis {retro.Orbit.PeriapsisAltitude / 1000.0:F2} km (85.07) and apoapsis unchanged",
-                   Math.Abs(retro.Orbit.PeriapsisAltitude - 85_070.0) < 500.0 && Math.Abs(retro.Orbit.ApoapsisAltitude - 185_000.0) < 5_000.0);
+            retro.SetControls(ControlInput.None);
+            Expect($"Burn: 10 s backward gives periapsis {retro.Orbit.PeriapsisAltitude / 1000.0:F2} km (85.07) and apoapsis unchanged",
+                   Math.Abs(retro.Orbit.PeriapsisAltitude - 85_068.0) < 300.0 && Math.Abs(retro.Orbit.ApoapsisAltitude - 185_000.0) < 1_000.0);
 
-            // Holding the burn: the engine must cut itself off before the orbit becomes unbound (Python: after about 1114 s).
+            // The thrust follows the attitude: every translation axis pushes along its body axis (sign: Y is left, so "right" is -Y).
+            // Compared with an identical craft that coasts, the velocity difference after a short burn is the thrust itself.
+            (ControlInput input, Vector3d body)[] axes =
+            {
+                (new ControlInput { TranslateX = 1 }, new Vector3d(1, 0, 0)),
+                (new ControlInput { TranslateX = -1 }, new Vector3d(-1, 0, 0)),
+                (new ControlInput { TranslateY = 1 }, new Vector3d(0, -1, 0)),
+                (new ControlInput { TranslateY = -1 }, new Vector3d(0, 1, 0)),
+                (new ControlInput { TranslateZ = 1 }, new Vector3d(0, 0, 1)),
+                (new ControlInput { TranslateZ = -1 }, new Vector3d(0, 0, -1)),
+            };
+            bool allAxes = true;
+            string worstAxis = "";
+            double worst = 0;
+            foreach (var axis in axes)
+            {
+                var burn = new SpacecraftSimulation(KeplerOrbit.Circular(185_000.0, 32.5), 100_000.0);
+                var twin = new SpacecraftSimulation(KeplerOrbit.Circular(185_000.0, 32.5), 100_000.0);
+                // Turn both craft to an arbitrary attitude (identical commands), then stop the rotation.
+                foreach (var sim in new[] { burn, twin })
+                {
+                    sim.SetControls(new ControlInput { Pitch = 1, Yaw = -1, Roll = 0.5 });
+                    for (int i = 0; i < 300; i++) sim.Advance(1.0 / 60.0);
+                    sim.SetControls(new ControlInput { StopRotation = true });
+                    for (int i = 0; i < 3000 && sim.ControlsActive; i++) sim.Advance(1.0 / 60.0);
+                    sim.SetControls(ControlInput.None);
+                }
+                Vector3d expectedDirection = burn.Attitude.Attitude.Rotate(axis.body);
+                burn.SetControls(axis.input);
+                for (int i = 0; i < 60; i++) { burn.Advance(1.0 / 60.0); twin.Advance(1.0 / 60.0); }
+                burn.SetControls(ControlInput.None);
+                Vector3d dv = burn.State.Velocity - twin.State.Velocity;
+                double error = (dv - expectedDirection * 3.0).Magnitude;
+                if (error > worst) { worst = error; worstAxis = $"{axis.body}"; }
+                if (error > 0.01) allAxes = false;
+            }
+            Expect($"Thrust: each of the 6 translation axes pushes along its body axis at 3 m/s^2 (worst error {worst:E1} m/s)", allAxes);
+
+            // Holding the engine until the orbit would become unbound: start from a high-energy orbit (+3000 m/s), Python: cutoff at 76.7 s.
             var hold = new SpacecraftSimulation(KeplerOrbit.Circular(185_000.0, 32.5), 100_000.0);
-            hold.SetThrust(true);
-            for (int i = 0; i < 100_000 && hold.EngineOn; i++) hold.Advance(0.1);
-            Expect($"Burn: escape cutoff after {hold.Clock.MissionElapsedTime:F0} s, orbit still bound (e = {hold.Orbit.Eccentricity:F5})",
+            hold.ApplyProgradeVelocityChange(3000.0);
+            hold.SetControls(Forward(1));
+            for (int i = 0; i < 2000 && hold.EngineOn; i++) hold.Advance(0.1);
+            Expect($"Burn: escape cutoff after {hold.Clock.MissionElapsedTime:F1} s (76.7), orbit still bound (e = {hold.Orbit.Eccentricity:F5})",
                    !hold.EngineOn && hold.EngineCutoffReason == "escape trajectory" && hold.Orbit.Eccentricity < 1.0
-                   && hold.Clock.MissionElapsedTime > 900.0 && hold.Clock.MissionElapsedTime < 1300.0);
+                   && Math.Abs(hold.Clock.MissionElapsedTime - 76.7) < 0.5);
+            hold.SetControls(Forward(1));
+            Expect("Burn: still inhibited while the command stays held", !hold.EngineOn);
+            hold.SetControls(ControlInput.None);
+            hold.SetControls(Forward(-1));
+            Expect("Burn: re-armed by a new command after release", hold.EngineOn && hold.EngineCutoffReason == "");
 
             // Restart clears the engine state.
             hold.Reset();

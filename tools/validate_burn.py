@@ -220,6 +220,7 @@ class Sim:
         self.dv = 0.0
         self.cutoff = None
         self.crashed = False
+        self.fixed = None      # inertial thrust direction (attitude hold); None = along the velocity
 
     def set_thrust(self, on, retro=False):
         self.thrust, self.retro = on, retro
@@ -228,8 +229,11 @@ class Sim:
     def _derivs(self, t, y):
         rr = norm(y[:3])
         k = -MU / rr**3
-        vm = norm(y[3:])
         sign = -1.0 if self.retro else 1.0
+        if self.fixed is not None:
+            d = [sign * self.accel * c for c in self.fixed]
+            return [y[3], y[4], y[5], k * y[0] + d[0], k * y[1] + d[1], k * y[2] + d[2]]
+        vm = norm(y[3:])
         a = self.accel * sign / vm
         return [y[3], y[4], y[5], k * y[0] + a * y[3], k * y[1] + a * y[4], k * y[2] + a * y[5]]
 
@@ -318,4 +322,26 @@ print(f"   engine cut off after {sim.t:.0f} s ({sim.dv:.0f} m/s used), reason: {
 assert sim.cutoff == "escape trajectory" and sim.orbit.e < 1 and 900 < sim.t < 1300
 rc, vc = sim.orbit.propagate(sim.t + 3600)
 print(f"   coasting afterwards still propagates: altitude {norm(rc) / 1000 - RE / 1000:.0f} km after 1 h")
+
+print("7. Attitude hold (V2 step 4): thrust along a FIXED inertial direction (the body +X axis does not follow the orbit)")
+def hold_burn(seconds, retro, frame=1/60, start=None):
+    sim = Sim(base)
+    if start: 
+        sim.pos, sim.vel = start
+        sim.orbit = Coast.try_create(sim.pos, sim.vel, 0.0)
+    sim.fixed = tuple(c / norm(sim.vel) for c in sim.vel)
+    sim.set_thrust(True, retro)
+    for _ in range(int(round(seconds / frame))):
+        sim.advance(frame)
+        if not sim.thrust: break
+    return sim
+h20 = hold_burn(20.0, False)
+print(f"   20 s +X: periapsis {h20.orbit.periapsis_alt()/1000:.3f} km, apoapsis {h20.orbit.apoapsis_alt()/1000:.3f} km, delta-v {h20.dv:.4f}")
+h10 = hold_burn(10.0, True)
+print(f"   10 s -X: periapsis {h10.orbit.periapsis_alt()/1000:.3f} km, apoapsis {h10.orbit.apoapsis_alt()/1000:.3f} km")
+r0, v0 = kepler_state(base, 0.0)
+vb = add(v0, mul(v0, 3000.0 / norm(v0)))
+hc = hold_burn(200.0, False, frame=0.05, start=(r0, vb))
+print(f"   high-energy start (+3000 m/s): cutoff {hc.cutoff!r} at t = {hc.t:.2f} s, e = {hc.orbit.e:.5f}")
+assert hc.cutoff == "escape trajectory"
 print("ALL BURN CHECKS PASSED")

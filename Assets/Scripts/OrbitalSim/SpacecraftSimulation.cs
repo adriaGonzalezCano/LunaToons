@@ -32,7 +32,8 @@ namespace Apollo.OrbitalSim
         private readonly Rk8Integrator integrator = new Rk8Integrator(6);
         private readonly double[] y = new double[6];
         private readonly OdeFunction derivatives;
-        private double thrustSign = 1.0;
+        private Vector3d thrustAcceleration;   // inertial frame, constant during one integration step
+        private bool engineInhibited;
 
         /// <summary>Largest angular acceleration the attitude controls can produce (rad/s^2).</summary>
         public const double MaxAngularAcceleration = 2.0 * Math.PI / 180.0;
@@ -75,32 +76,34 @@ namespace Apollo.OrbitalSim
             EngineOn || Controls.AnyAttitudeAxis || Controls.AnyTranslationAxis ||
             (Controls.StopRotation && Attitude.Rate.Magnitude > 0.0);
 
-        public void SetControls(ControlInput controls) => Controls = controls;
+        public void SetControls(ControlInput controls)
+        {
+            // A new translation command re-arms the engine after an automatic cutoff.
+            if (!controls.AnyTranslationAxis) engineInhibited = false;
+            else if (!Controls.AnyTranslationAxis)
+            {
+                engineInhibited = false;
+                EngineCutoffReason = "";
+            }
+            Controls = controls;
+        }
 
         public bool PeriapsisIsLow => Orbit.PeriapsisAltitude < RestartAltitude;
 
-        /// <summary>True while a burn is in progress (thrust 1). Thrust is binary for now: 1 or 0.</summary>
-        public bool EngineOn { get; private set; }
+        /// <summary>True while a translation thruster is firing (thrust 1 on each commanded axis, 0 otherwise).</summary>
+        public bool EngineOn => Controls.AnyTranslationAxis && !engineInhibited;
 
-        /// <summary>Thrust acceleration at full throttle, m/s^2. Direction is along (or against) the velocity until attitude exists.</summary>
+        /// <summary>
+        /// Thrust acceleration of each translation axis at thrust 1, m/s^2 (placeholder, the same for every axis).
+        /// Thrust acts along the body axes, so it follows the attitude of the spacecraft.
+        /// </summary>
         public double ThrustAcceleration { get; set; } = DefaultThrustAcceleration;
 
-        /// <summary>Total delta-v spent by the engine since the last restart (m/s).</summary>
+        /// <summary>Total delta-v spent by the engines since the last restart (m/s).</summary>
         public double DeltaVUsed { get; private set; }
 
-        /// <summary>Why the engine last stopped by itself (empty if it never did).</summary>
+        /// <summary>Why the engines last stopped by themselves (empty if they never did). Cleared by the next translation command.</summary>
         public string EngineCutoffReason { get; private set; } = "";
-
-        /// <summary>Starts (on = true) or stops (on = false) a burn. Retrograde thrusts against the velocity.</summary>
-        public void SetThrust(bool on, bool retrograde = false)
-        {
-            if (on)
-            {
-                EngineCutoffReason = "";
-                thrustSign = retrograde ? -1.0 : 1.0;
-            }
-            EngineOn = on;
-        }
 
         public AdvanceResult Advance(double realDeltaSeconds)
         {
@@ -117,6 +120,11 @@ namespace Apollo.OrbitalSim
                 double step = Math.Min(t + (ControlsActive ? PoweredStepSeconds : MaxChunkSeconds), target) - t;
                 if (EngineOn)
                 {
+                    // Thrust along the body axes, using the attitude at the middle of the step (the ship may be rotating).
+                    Vector3d bodyDirection = new Vector3d(Controls.TranslateX, -Controls.TranslateY, Controls.TranslateZ); // body +Y is left
+                    Vector3d bodyThrust = bodyDirection * ThrustAcceleration;
+                    thrustAcceleration = Attitude.AttitudeAfter(0.5 * step).Rotate(bodyThrust);
+
                     OrbitalState now = State;
                     y[0] = now.Position.X; y[1] = now.Position.Y; y[2] = now.Position.Z;
                     y[3] = now.Velocity.X; y[4] = now.Velocity.Y; y[5] = now.Velocity.Z;
@@ -127,7 +135,7 @@ namespace Apollo.OrbitalSim
                     if (!CoastOrbit.TryCreate(position, velocity, t + step, out CoastOrbit poweredOrbit))
                     {
                         // The burn would make the orbit unbound: cut the engine and redo this span as a coast.
-                        EngineOn = false;
+                        engineInhibited = true;
                         EngineCutoffReason = "escape trajectory";
                         continue;
                     }
@@ -136,7 +144,7 @@ namespace Apollo.OrbitalSim
                     t += step;
                     Orbit = poweredOrbit;
                     orbitChanged = true;
-                    DeltaVUsed += ThrustAcceleration * step;
+                    DeltaVUsed += bodyThrust.Magnitude * step;
                     State = new OrbitalState(t, position, velocity, position.Magnitude - KeplerOrbit.EarthRadius, velocity.Magnitude, Orbit.Period);
                 }
                 else
@@ -189,21 +197,19 @@ namespace Apollo.OrbitalSim
             return Quaterniond.FromBasis(x, y, z);
         }
 
-        // y = [x y z vx vy vz]; gravity plus thrust along the velocity direction.
+        // y = [x y z vx vy vz]; gravity plus the thrust acceleration of the current step.
         private void Derivatives(double t, double[] state, double[] derivative)
         {
             double r2 = state[0] * state[0] + state[1] * state[1] + state[2] * state[2];
             double r = Math.Sqrt(r2);
             double k = -KeplerOrbit.MuEarth / (r2 * r);
-            double speed = Math.Sqrt(state[3] * state[3] + state[4] * state[4] + state[5] * state[5]);
-            double thrust = speed > 0 ? thrustSign * ThrustAcceleration / speed : 0.0;
 
             derivative[0] = state[3];
             derivative[1] = state[4];
             derivative[2] = state[5];
-            derivative[3] = k * state[0] + thrust * state[3];
-            derivative[4] = k * state[1] + thrust * state[4];
-            derivative[5] = k * state[2] + thrust * state[5];
+            derivative[3] = k * state[0] + thrustAcceleration.X;
+            derivative[4] = k * state[1] + thrustAcceleration.Y;
+            derivative[5] = k * state[2] + thrustAcceleration.Z;
         }
 
         /// <summary>
@@ -236,7 +242,7 @@ namespace Apollo.OrbitalSim
             OrbitVersion++;
             Clock.ResetTime();
             Revolutions = 0.0;
-            EngineOn = false;
+            engineInhibited = false;
             EngineCutoffReason = "";
             DeltaVUsed = 0.0;
             TrackHistory.Clear();
