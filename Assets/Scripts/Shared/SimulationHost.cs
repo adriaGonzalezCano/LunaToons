@@ -24,6 +24,10 @@ namespace Apollo.Shared
         public double Revolutions => simulation.Revolutions;
         public double RestartAltitudeMeters => simulation.RestartAltitude;
         public bool PeriapsisIsLow => simulation.PeriapsisIsLow;
+        public bool EngineOn => simulation.EngineOn;
+        public double DeltaVUsed => simulation.DeltaVUsed;
+        public double ThrustAcceleration => simulation.ThrustAcceleration;
+        public string EngineCutoffReason => simulation.EngineCutoffReason;
 
         /// <summary>Why the simulation last restarted, and when (real time), for on-screen notices.</summary>
         public string LastRestartReason { get; private set; }
@@ -36,12 +40,22 @@ namespace Apollo.Shared
 
         private void Update()
         {
+            // Time-warp is not allowed during a burn (decision V2 #6): drop to x1 while the engine runs.
+            if (simulation.EngineOn && simulation.Clock.TimeScale > 1.0) simulation.Clock.SetTimeScale(1.0);
+
             if (simulation.Advance(Time.deltaTime) == AdvanceResult.BelowSafeAltitude)
                 Restart($"altitude fell below {restartAltitudeKm:F0} km");
         }
 
         public void SetTimeScale(double scale) => simulation.Clock.SetTimeScale(scale);
         public void SetPaused(bool paused) => simulation.Clock.SetPaused(paused);
+
+        /// <summary>Engine on/off (thrust 1 or 0). Starting a burn drops time-warp to x1.</summary>
+        public void SetThrust(bool on, bool retrograde = false)
+        {
+            if (on && simulation.Clock.TimeScale > 1.0) simulation.Clock.SetTimeScale(1.0);
+            simulation.SetThrust(on, retrograde);
+        }
 
         public bool ApplyProgradeVelocityChange(double deltaSpeed) => simulation.ApplyProgradeVelocityChange(deltaSpeed);
 

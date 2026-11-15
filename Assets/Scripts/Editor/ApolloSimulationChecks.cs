@@ -26,6 +26,8 @@ namespace Apollo.EditorTools
             CheckCoastPropagator();
             CheckVelocityChange();
             CheckRestartLogic();
+            CheckPoweredFlight();
+            CheckHighEccentricity();
             CheckTrackHistory();
             CheckClock();
             CheckViewMapping();
@@ -192,6 +194,84 @@ namespace Apollo.EditorTools
             int version = sim.OrbitVersion;
             bool refused = !sim.ApplyProgradeVelocityChange(4000.0);
             Expect("Velocity change: escape trajectory refused, orbit untouched", refused && sim.OrbitVersion == version);
+        }
+
+        private static void CheckPoweredFlight()
+        {
+            // 20 s prograde burn at 3 m/s^2 (default orbit). Python port (tools/validate_burn.py): delta-v 60 m/s, apoapsis 390.74 km
+            // (impulsive 60 m/s: 390.75 km), frame-rate differences about 1e-8 m.
+            SpacecraftSimulation Burn(double frameSeconds)
+            {
+                var sim = new SpacecraftSimulation(KeplerOrbit.Circular(185_000.0, 32.5), 100_000.0);
+                sim.SetThrust(true);
+                int frames = (int)Math.Round(20.0 / frameSeconds);
+                for (int i = 0; i < frames; i++) sim.Advance(frameSeconds);
+                sim.SetThrust(false);
+                return sim;
+            }
+
+            SpacecraftSimulation a = Burn(1.0 / 60.0);
+            SpacecraftSimulation b = Burn(1.0 / 144.0);
+            SpacecraftSimulation c = Burn(1.0 / 30.0);
+            Expect($"Burn: delta-v spent {a.DeltaVUsed:F6} m/s equals thrust x time (60 m/s)", Math.Abs(a.DeltaVUsed - 60.0) < 1e-6);
+            Expect($"Burn: apoapsis {a.Orbit.ApoapsisAltitude / 1000.0:F2} km matches the impulsive prediction (390.75 km), periapsis {a.Orbit.PeriapsisAltitude / 1000.0:F2} km stays 185 km",
+                   Math.Abs(a.Orbit.ApoapsisAltitude - 390_750.0) < 1_000.0 && Math.Abs(a.Orbit.PeriapsisAltitude - 185_000.0) < 500.0);
+            Expect($"Burn: result independent of frame rate (60 vs 144 fps: {(a.State.Position - b.State.Position).Magnitude:E1} m; 60 vs 30 fps: {(a.State.Position - c.State.Position).Magnitude:E1} m)",
+                   (a.State.Position - b.State.Position).Magnitude < 1e-3 && (a.State.Position - c.State.Position).Magnitude < 1e-3
+                   && (a.State.Velocity - b.State.Velocity).Magnitude < 1e-6);
+            Expect("Burn: engine reported off after release", !a.EngineOn);
+
+            // After release the coast continues from the burn-end state without a jump.
+            OrbitalState end = a.State;
+            double t = a.Clock.MissionElapsedTime;
+            a.Advance(1.0);
+            Expect("Burn: coast after release is continuous with the burn-end state",
+                   (a.State.Position - a.Orbit.Propagate(t + 1.0).Position).Magnitude < 1e-6 && (a.State.Position - end.Position).Magnitude < 8_100.0);
+
+            // Retrograde: 10 s lowers the periapsis (about 85 km), apoapsis unchanged.
+            var retro = new SpacecraftSimulation(KeplerOrbit.Circular(185_000.0, 32.5), 100_000.0);
+            retro.SetThrust(true, true);
+            for (int i = 0; i < 600; i++) retro.Advance(1.0 / 60.0);
+            retro.SetThrust(false);
+            Expect($"Burn: 10 s retrograde gives periapsis {retro.Orbit.PeriapsisAltitude / 1000.0:F2} km (85.07) and apoapsis unchanged",
+                   Math.Abs(retro.Orbit.PeriapsisAltitude - 85_070.0) < 500.0 && Math.Abs(retro.Orbit.ApoapsisAltitude - 185_000.0) < 5_000.0);
+
+            // Holding the burn: the engine must cut itself off before the orbit becomes unbound (Python: after about 1114 s).
+            var hold = new SpacecraftSimulation(KeplerOrbit.Circular(185_000.0, 32.5), 100_000.0);
+            hold.SetThrust(true);
+            for (int i = 0; i < 100_000 && hold.EngineOn; i++) hold.Advance(0.1);
+            Expect($"Burn: escape cutoff after {hold.Clock.MissionElapsedTime:F0} s, orbit still bound (e = {hold.Orbit.Eccentricity:F5})",
+                   !hold.EngineOn && hold.EngineCutoffReason == "escape trajectory" && hold.Orbit.Eccentricity < 1.0
+                   && hold.Clock.MissionElapsedTime > 900.0 && hold.Clock.MissionElapsedTime < 1300.0);
+
+            // Restart clears the engine state.
+            hold.Reset();
+            Expect("Burn: restart clears engine state and delta-v", !hold.EngineOn && hold.DeltaVUsed == 0.0 && hold.EngineCutoffReason == "");
+        }
+
+        private static void CheckHighEccentricity()
+        {
+            // Periapsis 185 km, e = 0.97 and 0.995: the solver must converge and conserve energy, angular momentum, and close after one period.
+            foreach (double e in new[] { 0.9, 0.97, 0.995 })
+            {
+                double rp = KeplerOrbit.EarthRadius + 185_000.0;
+                double sma = rp / (1 - e);
+                double speed = Math.Sqrt(KeplerOrbit.MuEarth * (2.0 / rp - 1.0 / sma));
+                CoastOrbit.TryCreate(new Vector3d(rp, 0, 0), new Vector3d(0, speed, 0), 0.0, out CoastOrbit orbit);
+                double energy0 = speed * speed / 2 - KeplerOrbit.MuEarth / rp;
+                double h0 = rp * speed;
+                bool conserved = true;
+                for (int k = -40; k <= 40; k++)
+                {
+                    OrbitalState s = orbit.Propagate(orbit.Period * k / 37.0);
+                    double energy = s.Speed * s.Speed / 2 - KeplerOrbit.MuEarth / s.Position.Magnitude;
+                    double h = Vector3d.Cross(s.Position, s.Velocity).Magnitude;
+                    if (Math.Abs(energy - energy0) / Math.Abs(energy0) > 1e-9 || Math.Abs(h - h0) / h0 > 1e-9) conserved = false;
+                }
+                OrbitalState back = orbit.Propagate(orbit.Period);
+                Expect($"Coast e = {e}: energy and angular momentum conserved, back at periapsis after one period ({(back.Position - new Vector3d(rp, 0, 0)).Magnitude:E1} m)",
+                       conserved && (back.Position - new Vector3d(rp, 0, 0)).Magnitude < 1e-2);
+            }
         }
 
         private static void CheckRestartLogic()

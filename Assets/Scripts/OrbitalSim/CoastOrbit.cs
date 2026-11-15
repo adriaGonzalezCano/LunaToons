@@ -76,18 +76,27 @@ namespace Apollo.OrbitalSim
             // The motion repeats every period, so reduce the time span first (keeps precision over long spans).
             double dt = Math.IEEERemainder(missionElapsedTime - epoch, Period);
 
-            double chi = SqrtMu * dt * alpha;
-            double c = 0, s = 0, r = radius0;
-            for (int i = 0; i < 100; i++)
+            // Solve the universal Kepler equation F(chi) = 0. F is strictly increasing (dF/dchi = r > 0) and the root lies within
+            // +-2*pi/sqrt(alpha) for a time span of at most half a period, so a bracketed Newton iteration (bisection as the
+            // fallback) always converges, even for eccentricities close to 1 where plain Newton can diverge.
+            double bound = 2 * Math.PI / Math.Sqrt(alpha);
+            double low = -bound, high = bound;
+            double chi = Math.Max(low, Math.Min(high, SqrtMu * dt * alpha));
+            double c, s, r;
+            for (int i = 0; i < 200; i++)
             {
                 double z = alpha * chi * chi;
                 c = StumpffC(z);
                 s = StumpffS(z);
                 r = chi * chi * c + sigma0 * chi * (1 - z * s) + radius0 * (1 - z * c);
                 double f = sigma0 * chi * chi * c + (1 - alpha * radius0) * chi * chi * chi * s + radius0 * chi - SqrtMu * dt;
-                double step = f / r;
-                chi -= step;
-                if (Math.Abs(step) < 1e-9) break;
+                if (f < 0) low = chi; else high = chi;
+
+                double next = chi - f / r;
+                if (!(next > low && next < high)) next = 0.5 * (low + high); // Newton left the bracket (or is NaN): bisect
+                bool converged = Math.Abs(next - chi) < 1e-9;
+                chi = next;
+                if (converged) break;
             }
 
             double zf = alpha * chi * chi;

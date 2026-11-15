@@ -10,6 +10,7 @@ Runs the real C# orbital code and logs PASS/FAIL per check in the Console:
 - Determinism: a given mission time always gives the identical state.
 - Earth rotation: start point lat 0 / lon 0; ground track shifts west about 22.07 deg per orbit; one turn per sidereal day.
 - Coasting from a state vector (V2 M0): matches the element-based propagation on 8 orbit types over short, long and negative time spans, conserves energy and angular momentum, +100 m/s velocity change matches vis-viva, escape refused, restart below 100 km (also at x1000 warp), no false restarts, ground-track history recording and pruning.
+- Powered flight (V2): 20 s burn gives delta-v 60 m/s, apoapsis matches the impulsive prediction (390.75 km), result identical at 30/60/144 fps, release gives a continuous coast, retrograde burn gives periapsis 85 km, escape cutoff, restart clears engine state; coasting solver converges with conserved energy/angular momentum up to e = 0.995.
 - Clock: time scale, pause and resume behave.
 - ViewMapping: Unity (x,y,z) = ECI (x,z,y) and length is preserved.
 Expected result: "Apollo simulation checks: N passed, 0 failed." (N is the number of checks; there must be no FAIL line).
@@ -28,6 +29,8 @@ Expected result: "Apollo simulation checks: N passed, 0 failed." (N is the numbe
 10. Ground track (Control Center 2, F3 or Tab twice): flat map with cyan past track, yellow predicted track and a red spacecraft marker; each successive orbit is displaced west by about 22 deg; no horizontal line crosses the map where the track wraps at the +-180 edge; the bottom strip shows lat/lon matching the marker.
 11. Window view: ground below moves and its direction is consistent with the Earth rotation (the Earth turns eastward under the spacecraft path).
 12. Interior: three couches face the dark instrument panel, indicator lights glow, the round hatch is at the back, and you can walk along both side aisles to the panel without getting stuck.
+
+13. Burn (V2): rebuild the scene (Apollo > Build V1 Scene), press Play, hold T: Engine ON, Delta-v used grows at 3 m/s per second, apoapsis rises live and the yellow orbit ring and cyan/yellow ground tracks update each frame; release T: Engine OFF and orbit elements freeze. Shift+T lowers the periapsis; below 100 km the simulation restarts. Holding T for ~18 min cuts the engine (escape).
 
 ## Structural guarantees (by design, not by test)
 - One `SimulationHost` on an always-active object. Tab only toggles the two rigs; it never touches the host.

@@ -36,12 +36,15 @@ namespace Apollo.MissionControl
             string warning = host.PeriapsisIsLow ? $"\n!! LOW PERIAPSIS - restart below {host.RestartAltitudeMeters / 1000.0:F0} km" : "";
             GeoPoint ground = EarthRotation.SubPoint(s.Position, s.MissionElapsedTime);
             string timeScale = clock.IsPaused ? "PAUSED" : $"x{clock.TimeScale:0.#}";
+            string engine = host.EngineOn ? "ON  (thrust 1)" : "OFF (coast)";
 
             return
                 "MISSION CONTROL TELEMETRY\n" +
                 "-------------------------\n" +
                 $"MET            {(int)met.TotalHours:000}:{met.Minutes:00}:{met.Seconds:00}   ({timeScale})\n" +
                 $"Orbit #        {orbitNumber}\n" +
+                $"Engine         {engine}\n" +
+                $"Delta-v used   {host.DeltaVUsed,10:F1} m/s\n" +
                 $"Altitude       {s.Altitude / 1000.0,10:F3} km\n" +
                 $"Speed          {s.Speed,10:F2} m/s\n" +
                 $"Period         {s.Period / 60.0,10:F2} min\n" +
