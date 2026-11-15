@@ -4,31 +4,52 @@ using UnityEngine;
 namespace Apollo.Shared
 {
     /// <summary>
-    /// The one simulation instance. Ticks the clock and publishes the current orbital state.
-    /// Both the spacecraft and Mission Control read CurrentState; neither owns orbital data.
+    /// Unity wrapper around the one SpacecraftSimulation. Ticks it every frame and exposes the state to the views.
+    /// Neither the spacecraft nor Mission Control owns orbital data; they all read from here.
     /// </summary>
     public sealed class SimulationHost : MonoBehaviour
     {
         [SerializeField] private double altitudeKm = 185.0;
         [SerializeField] private double inclinationDegrees = 32.5;
+        [Tooltip("Below this altitude the simulation restarts. Also the threshold of the low-periapsis warning.")]
+        [SerializeField] private double restartAltitudeKm = 100.0;
 
-        public KeplerOrbit Orbit { get; private set; }
-        public SimulationClock Clock { get; } = new SimulationClock();
-        public OrbitalState CurrentState { get; private set; }
+        private SpacecraftSimulation simulation;
+
+        public KeplerOrbit Orbit => simulation?.Orbit;
+        public int OrbitVersion => simulation != null ? simulation.OrbitVersion : 0;
+        public SimulationClock Clock => simulation.Clock;
+        public OrbitalState CurrentState => simulation.State;
+        public GroundTrackHistory TrackHistory => simulation.TrackHistory;
+        public double Revolutions => simulation.Revolutions;
+        public double RestartAltitudeMeters => simulation.RestartAltitude;
+        public bool PeriapsisIsLow => simulation.PeriapsisIsLow;
+
+        /// <summary>Why the simulation last restarted, and when (real time), for on-screen notices.</summary>
+        public string LastRestartReason { get; private set; }
+        public float LastRestartRealTime { get; private set; } = float.NegativeInfinity;
 
         private void Awake()
         {
-            Orbit = KeplerOrbit.Circular(altitudeKm * 1000.0, inclinationDegrees);
-            CurrentState = Orbit.Propagate(0.0);
+            simulation = new SpacecraftSimulation(KeplerOrbit.Circular(altitudeKm * 1000.0, inclinationDegrees), restartAltitudeKm * 1000.0);
         }
 
         private void Update()
         {
-            Clock.Advance(Time.deltaTime);
-            CurrentState = Orbit.Propagate(Clock.MissionElapsedTime);
+            if (simulation.Advance(Time.deltaTime) == AdvanceResult.BelowSafeAltitude)
+                Restart($"altitude fell below {restartAltitudeKm:F0} km");
         }
 
-        public void SetTimeScale(double scale) => Clock.SetTimeScale(scale);
-        public void SetPaused(bool paused) => Clock.SetPaused(paused);
+        public void SetTimeScale(double scale) => simulation.Clock.SetTimeScale(scale);
+        public void SetPaused(bool paused) => simulation.Clock.SetPaused(paused);
+
+        public bool ApplyProgradeVelocityChange(double deltaSpeed) => simulation.ApplyProgradeVelocityChange(deltaSpeed);
+
+        public void Restart(string reason)
+        {
+            simulation.Reset();
+            LastRestartReason = reason;
+            LastRestartRealTime = Time.realtimeSinceStartup;
+        }
     }
 }

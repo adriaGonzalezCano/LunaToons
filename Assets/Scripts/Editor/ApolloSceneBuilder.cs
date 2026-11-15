@@ -26,6 +26,7 @@ namespace Apollo.EditorTools
             var systems = new GameObject("SimulationHost");
             var host = systems.AddComponent<SimulationHost>();
             SetRef(systems.AddComponent<SimulationTimeControls>(), "host", host);
+            SetRef(systems.AddComponent<DebugImpulseControls>(), "host", host);
             var switcher = systems.AddComponent<EnvironmentSwitcher>();
 
             ApolloInteriorBuilder.Build();

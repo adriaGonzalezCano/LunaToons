@@ -7,6 +7,9 @@ Unity 6 LTS + URP prototype. Scope: spacecraft in Earth orbit (first-person inte
 - Not done by design (V1 out of scope): multiplayer, launch, Moon, docking, manoeuvres, subsystems, failures, objectives.
 - Known simplifications: spherical Earth, two-body orbit with no perturbations, fixed nadir-pointing attitude, artificial gravity in the cabin, Earth rotation angle 0 at MET 0.
 
+## V2 (in progress, see docs/V2_PLAN.md)
+- M0 (simulation foundation) written, not yet run in Unity. Debug keys: ] / [ = +/-10 m/s along the velocity, R = restart.
+
 ## Try it in Unity
 1. Open the project and check the Console for compile errors.
 2. Menu: Apollo > Run Simulation Checks (expect all PASS in the Console).

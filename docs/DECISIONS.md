@@ -31,3 +31,10 @@ Statuses: CONFIRMED (approved by owner), ASSUMPTION (working, can change), OPEN.
 | Interior style | ASSUMPTION | Command-Module-inspired cabin from primitives (3 couches, instrument panel, hatch, framed window); still a blockout, not accurate to Apollo |
 | Real Earth map | ASSUMPTION | NASA Blue Marble (owner-supplied, 21600x10800) downscaled to 8192x4096 as Assets/Resources/EarthMap.jpg; original kept in Assets/SourceArt~/ (ignored by Unity). Procedural map remains as fallback |
 | V1 scope | CLOSED | V1 validated by owner on 2026-11-15 and tagged v0.1. Next direction (roles design, first manoeuvre, or multiplayer spike) is OPEN |
+| V2 orbit model | CONFIRMED | Approach A: recompute elements from the state vector after each velocity change (see docs/V2_PLAN.md) |
+| V2 attitude | CONFIRMED | Conserved angular momentum, torque-driven, plus a stop-rotation button |
+| V2 engine | CONFIRMED | Thrust along body +X, propellant as delta-v budget |
+| V2 interaction | CONFIRMED | Basic crosshair press/hold first; seat mode OPEN |
+| V2 low periapsis | ASSUMPTION | Restart when altitude < 100 km; warning when predicted periapsis < 100 km (owner said "periapsis too low": threshold and trigger to confirm) |
+| V2 time warp | CONFIRMED | Auto-drop to x1 while engine or controls active |
+| Periapsis below surface | ASSUMPTION | KeplerOrbit now allows it (a burn can create it); the simulation restarts before the craft reaches the low altitude |

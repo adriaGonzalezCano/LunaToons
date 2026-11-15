@@ -16,6 +16,8 @@ namespace Apollo.MissionControl
 
         private Transform marker;
         private Transform earth;
+        private LineRenderer line;
+        private int builtOrbitVersion = -1;
 
         private void Start()
         {
@@ -26,34 +28,42 @@ namespace Apollo.MissionControl
 
             marker = ViewFactory.CreateMeshObject("Spacecraft", transform, ViewFactory.CreateSphereMesh(12, 8), ViewFactory.Unlit(Color.red), 3f, Vector3.zero).transform;
 
-            BuildTrajectory();
+            CreateTrajectoryLine();
         }
 
         private void Update()
         {
             if (host == null || host.Orbit == null || marker == null || earth == null) return;
+            if (host.OrbitVersion != builtOrbitVersion) RebuildTrajectory();
+
             var state = host.CurrentState;
             marker.localPosition = ViewMapping.ToUnity(state.Position, metersPerUnit);
             earth.localRotation = Quaternion.Euler(0f, (float)(-EarthRotation.Angle(state.MissionElapsedTime) * Mathf.Rad2Deg), 0f);
         }
 
-        private void BuildTrajectory()
+        private void CreateTrajectoryLine()
         {
             var lineObject = new GameObject("Trajectory");
             lineObject.transform.SetParent(transform, false);
-            var line = lineObject.AddComponent<LineRenderer>();
+            line = lineObject.AddComponent<LineRenderer>();
             line.useWorldSpace = false;
             line.loop = true;
             line.positionCount = trajectorySamples;
             line.widthMultiplier = 0.5f;
             line.sharedMaterial = ViewFactory.Unlit(Color.yellow);
+        }
 
+        // The ring is the current orbit; it is rebuilt whenever a velocity change (or restart) replaces the orbit.
+        private void RebuildTrajectory()
+        {
             KeplerOrbit orbit = host.Orbit;
+            double now = host.CurrentState.MissionElapsedTime;
             for (int i = 0; i < trajectorySamples; i++)
             {
-                double t = orbit.Period * i / trajectorySamples;
+                double t = now + orbit.Period * i / trajectorySamples;
                 line.SetPosition(i, ViewMapping.ToUnity(orbit.Propagate(t).Position, metersPerUnit));
             }
+            builtOrbitVersion = host.OrbitVersion;
         }
     }
 }

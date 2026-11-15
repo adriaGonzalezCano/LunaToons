@@ -8,8 +8,8 @@ namespace Apollo.MissionControl
 {
     /// <summary>
     /// Mission Control view 2: flat equirectangular Earth map with the ground track.
-    /// Past track (up to one orbit back) and predicted track (1.5 orbits ahead) are recomputed every frame
-    /// from the analytic orbit and the Earth rotation, so they always agree with the simulation state.
+    /// The past track (up to one orbit back) is the recorded history; the predicted track (1.5 orbits ahead) is recomputed
+    /// every frame from the current orbit and the Earth rotation, so both always agree with the simulation state.
     /// Map: 200 x 100 units, longitude -180..180 maps to x -100..100, latitude -90..90 maps to y -50..50.
     /// </summary>
     public sealed class GroundTrackView : MonoBehaviour
@@ -26,6 +26,7 @@ namespace Apollo.MissionControl
         private readonly List<LineRenderer> pastLines = new List<LineRenderer>();
         private readonly List<LineRenderer> futureLines = new List<LineRenderer>();
         private readonly List<Vector3> segment = new List<Vector3>();
+        private readonly List<GeoPoint> points = new List<GeoPoint>();
 
         private void Start()
         {
@@ -49,10 +50,25 @@ namespace Apollo.MissionControl
             KeplerOrbit orbit = host.Orbit;
             double now = state.MissionElapsedTime;
 
-            RebuildTrack(pastLines, pastMaterial, orbit, Math.Max(0.0, now - orbit.Period), now);
-            RebuildTrack(futureLines, futureMaterial, orbit, now, now + 1.5 * orbit.Period);
-
             GeoPoint here = EarthRotation.SubPoint(state.Position, now);
+
+            // Past: recorded history (the orbit may have changed since), up to one period back, joined to the current point.
+            points.Clear();
+            IReadOnlyList<TrackSample> history = host.TrackHistory.Samples;
+            for (int i = 0; i < history.Count; i++)
+                if (history[i].MissionElapsedTime >= now - orbit.Period) points.Add(history[i].Point);
+            points.Add(here);
+            RebuildTrack(pastLines, pastMaterial);
+
+            // Future: predicted from the current orbit.
+            points.Clear();
+            for (int i = 0; i <= samplesPerTrack; i++)
+            {
+                double t = now + 1.5 * orbit.Period * i / samplesPerTrack;
+                points.Add(EarthRotation.SubPoint(orbit.Propagate(t).Position, t));
+            }
+            RebuildTrack(futureLines, futureMaterial);
+
             marker.localPosition = new Vector3(ToMapX(here), ToMapY(here), -0.6f);
         }
 
@@ -68,16 +84,15 @@ namespace Apollo.MissionControl
         private static float ToMapX(GeoPoint p) => (float)(p.LongitudeRad / Math.PI) * (MapWidth / 2f);
         private static float ToMapY(GeoPoint p) => (float)(p.LatitudeRad / (Math.PI / 2.0)) * (MapHeight / 2f);
 
-        private void RebuildTrack(List<LineRenderer> pool, Material material, KeplerOrbit orbit, double t0, double t1)
+        private void RebuildTrack(List<LineRenderer> pool, Material material)
         {
             int used = 0;
             segment.Clear();
             double previousLongitude = 0.0;
 
-            for (int i = 0; i <= samplesPerTrack; i++)
+            for (int i = 0; i < points.Count; i++)
             {
-                double t = t0 + (t1 - t0) * i / samplesPerTrack;
-                GeoPoint point = EarthRotation.SubPoint(orbit.Propagate(t).Position, t);
+                GeoPoint point = points[i];
 
                 // Break the line where the track wraps across the +-180 degree edge of the map.
                 if (i > 0 && Math.Abs(point.LongitudeRad - previousLongitude) > Math.PI)

@@ -9,9 +9,10 @@ Runs the real C# orbital code and logs PASS/FAIL per check in the Console:
 - Elliptical orbit: energy and angular momentum conserved; returns to start after one period; vis-viva holds.
 - Determinism: a given mission time always gives the identical state.
 - Earth rotation: start point lat 0 / lon 0; ground track shifts west about 22.07 deg per orbit; one turn per sidereal day.
+- Orbit recomputed from a state vector (V2 M0): round trip on 7 orbit types, +100 m/s burn matches vis-viva, escape refused, restart below 100 km (also at x1000 warp), no false restarts, ground-track history recording and pruning.
 - Clock: time scale, pause and resume behave.
 - ViewMapping: Unity (x,y,z) = ECI (x,z,y) and length is preserved.
-Expected result: "Apollo simulation checks: 18 passed, 0 failed."
+Expected result: "Apollo simulation checks: N passed, 0 failed." (N is the number of checks; there must be no FAIL line).
 
 ## B. Manual: in Play mode (scene from "Apollo > Build V1 Scene")
 1. Stable orbit: in Mission Control, Altitude stays at about 185.000 km and Speed at about 7797 m/s for several minutes (use key 4 for x1000).

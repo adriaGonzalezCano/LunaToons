@@ -23,6 +23,10 @@ namespace Apollo.EditorTools
             CheckCircular();
             CheckElliptical(KeplerOrbit.EarthRadius + 0.0, 12_000_000.0, 0.3, 51.6);
             CheckEarthRotation();
+            CheckReseed();
+            CheckVelocityChange();
+            CheckRestartLogic();
+            CheckTrackHistory();
             CheckClock();
             CheckViewMapping();
 
@@ -108,6 +112,111 @@ namespace Apollo.EditorTools
             double siderealDay = 2 * Math.PI / EarthRotation.AngularVelocity;
             Expect($"Earth rotation: one full turn per sidereal day ({siderealDay:F1} s)",
                    Math.Abs(EarthRotation.Angle(siderealDay)) < 1e-9);
+        }
+
+        // --- V2 milestone 0: orbit recomputed from a state vector (approach A) -----------------------------------------------
+
+        private static void CheckReseed()
+        {
+            double deg = Math.PI / 180.0;
+            double r = KeplerOrbit.EarthRadius;
+            var cases = new (string name, KeplerOrbit orbit)[]
+            {
+                ("circular equatorial", new KeplerOrbit(r + 400e3, 0.0, 0.0, 0.0, 0.0, 0.0)),
+                ("circular inclined 32.5", new KeplerOrbit(r + 185e3, 0.0, 32.5 * deg, 0.7, 0.0, 0.4)),
+                ("elliptical inclined 51.6", new KeplerOrbit(12.0e6, 0.3, 51.6 * deg, 0.7, 1.1, 0.4)),
+                ("elliptical equatorial", new KeplerOrbit(9.0e6, 0.1, 0.0, 0.0, 2.0, 1.0)),
+                ("elliptical retrograde equatorial", new KeplerOrbit(9.0e6, 0.1, Math.PI, 0.0, 2.0, 1.0)),
+                ("near-circular e=1e-4", new KeplerOrbit(r + 300e3, 1e-4, 28.5 * deg, 1.2, 0.5, 2.0)),
+                ("polar", new KeplerOrbit(r + 600e3, 0.02, 90.0 * deg, 2.0, 1.0, 3.0)),
+            };
+
+            foreach (var (name, orbit) in cases)
+            {
+                double worstPosition = 0, worstVelocity = 0;
+                bool built = true;
+                foreach (double t0 in new[] { 0.0, 1234.5, 5000.0, 40000.0 })
+                {
+                    OrbitalState s0 = orbit.Propagate(t0);
+                    if (!KeplerOrbit.TryFromState(s0.Position, s0.Velocity, t0, out KeplerOrbit rebuilt)) { built = false; break; }
+                    foreach (double dt in new[] { 0.0, 777.0, 20000.0, 86164.0 })
+                    {
+                        OrbitalState a = orbit.Propagate(t0 + dt), b = rebuilt.Propagate(t0 + dt);
+                        worstPosition = Math.Max(worstPosition, (a.Position - b.Position).Magnitude);
+                        worstVelocity = Math.Max(worstVelocity, (a.Velocity - b.Velocity).Magnitude);
+                    }
+                }
+                Expect($"Reseed round trip, {name} (position {worstPosition:E1} m, velocity {worstVelocity:E1} m/s)",
+                       built && worstPosition < 1e-3 && worstVelocity < 1e-6);
+            }
+        }
+
+        private static void CheckVelocityChange()
+        {
+            // Default orbit, +100 m/s along the velocity at MET 1000 s. Python cross-check: apoapsis 532.44 km, periapsis 185.00 km.
+            var sim = new SpacecraftSimulation(KeplerOrbit.Circular(185_000.0, 32.5), 100_000.0);
+            sim.Clock.Advance(1000.0);
+            OrbitalState before = sim.Orbit.Propagate(1000.0);
+            int versionBefore = sim.OrbitVersion;
+
+            bool applied = sim.ApplyProgradeVelocityChange(100.0);
+            OrbitalState after = sim.State;
+            Expect("Velocity change: applied and orbit version incremented", applied && sim.OrbitVersion == versionBefore + 1);
+            Expect($"Velocity change: position unchanged, speed up by exactly 100 m/s ({(after.Speed - before.Speed - 100.0):E1})",
+                   (after.Position - before.Position).Magnitude < 1e-3 && Math.Abs(after.Speed - before.Speed - 100.0) < 1e-6);
+            Expect($"Velocity change: apoapsis {sim.Orbit.ApoapsisAltitude / 1000.0:F2} km matches vis-viva (532.44 km)",
+                   Math.Abs(sim.Orbit.ApoapsisAltitude - 532_440.0) < 200.0);
+            Expect("Velocity change: periapsis stays at the burn altitude (185 km)", Math.Abs(sim.Orbit.PeriapsisAltitude - 185_000.0) < 10.0);
+
+            // An escape velocity change is refused and changes nothing.
+            int version = sim.OrbitVersion;
+            bool refused = !sim.ApplyProgradeVelocityChange(4000.0);
+            Expect("Velocity change: escape trajectory refused, orbit untouched", refused && sim.OrbitVersion == version);
+        }
+
+        private static void CheckRestartLogic()
+        {
+            // 30 m/s retrograde at MET 0 gives a periapsis of about 85 km, below the 100 km limit.
+            var sim = new SpacecraftSimulation(KeplerOrbit.Circular(185_000.0, 32.5), 100_000.0);
+            Expect("Restart: no low-periapsis warning on the default orbit", !sim.PeriapsisIsLow);
+            sim.ApplyProgradeVelocityChange(-30.0);
+            Expect($"Restart: low-periapsis warning raised (periapsis {sim.Orbit.PeriapsisAltitude / 1000.0:F1} km)", sim.PeriapsisIsLow);
+
+            double period = sim.Orbit.Period;
+            AdvanceResult result = AdvanceResult.Nominal;
+            for (int i = 0; i < 100 && result == AdvanceResult.Nominal; i++) result = sim.Advance(60.0);
+            Expect($"Restart: detected within one period (MET {sim.Clock.MissionElapsedTime:F0} s of {period:F0} s)",
+                   result == AdvanceResult.BelowSafeAltitude && sim.Clock.MissionElapsedTime < period);
+            Expect("Restart: altitude is below the limit at detection", sim.State.Altitude < 100_000.0);
+
+            sim.Reset();
+            Expect("Restart: reset returns to MET 0 and the initial orbit",
+                   sim.Clock.MissionElapsedTime == 0.0 && Math.Abs(sim.Orbit.PeriapsisAltitude - 185_000.0) < 1e-6 && !sim.PeriapsisIsLow);
+
+            // Detection must also work at x1000 time-warp (about 16 s of mission time per frame).
+            sim.ApplyProgradeVelocityChange(-30.0);
+            sim.Clock.SetTimeScale(1000.0);
+            result = AdvanceResult.Nominal;
+            for (int i = 0; i < 1000 && result == AdvanceResult.Nominal; i++) result = sim.Advance(1.0 / 60.0);
+            Expect("Restart: detected under x1000 time-warp", result == AdvanceResult.BelowSafeAltitude);
+
+            // No false restarts over three orbits of a healthy, slightly raised orbit.
+            var healthy = new SpacecraftSimulation(KeplerOrbit.Circular(185_000.0, 32.5), 100_000.0);
+            healthy.ApplyProgradeVelocityChange(10.0);
+            bool nominal = true;
+            for (int i = 0; i < 270 && nominal; i++) nominal = healthy.Advance(60.0) == AdvanceResult.Nominal;
+            Expect("Restart: no false restart over three orbits", nominal);
+        }
+
+        private static void CheckTrackHistory()
+        {
+            var sim = new SpacecraftSimulation(KeplerOrbit.Circular(185_000.0, 32.5), 100_000.0);
+            for (int i = 0; i < 50; i++) sim.Advance(60.0); // 3000 s
+            int count = sim.TrackHistory.Samples.Count;
+            Expect($"Track history: one sample per 10 s ({count} samples over 3000 s)", count >= 295 && count <= 305);
+
+            for (int i = 0; i < 200; i++) sim.Advance(60.0); // 15000 s total
+            Expect($"Track history: old samples pruned ({sim.TrackHistory.Samples.Count} kept)", sim.TrackHistory.Samples.Count <= 722);
         }
 
         private static void CheckClock()

@@ -22,5 +22,8 @@ namespace Apollo.OrbitalSim
         }
 
         public void SetPaused(bool paused) => IsPaused = paused;
+
+        /// <summary>Sets mission elapsed time back to 0. Time scale and pause state are kept.</summary>
+        public void ResetTime() => MissionElapsedTime = 0.0;
     }
 }

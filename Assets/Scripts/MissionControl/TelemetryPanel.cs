@@ -26,13 +26,14 @@ namespace Apollo.MissionControl
         private void Update()
         {
             if (host == null || host.Orbit == null || label == null) return;
-            label.text = compact ? FormatCompact(host.CurrentState, host.Clock) : Format(host.CurrentState, host.Orbit, host.Clock);
+            label.text = compact ? FormatCompact(host.CurrentState, host.Clock) : Format(host.CurrentState, host.Orbit, host.Clock, host);
         }
 
-        private static string Format(OrbitalState s, KeplerOrbit orbit, SimulationClock clock)
+        private static string Format(OrbitalState s, KeplerOrbit orbit, SimulationClock clock, SimulationHost host)
         {
             TimeSpan met = TimeSpan.FromSeconds(s.MissionElapsedTime);
-            int orbitNumber = (int)Math.Floor(s.MissionElapsedTime / s.Period) + 1;
+            int orbitNumber = (int)Math.Floor(host.Revolutions) + 1;
+            string warning = host.PeriapsisIsLow ? $"\n!! LOW PERIAPSIS - restart below {host.RestartAltitudeMeters / 1000.0:F0} km" : "";
             GeoPoint ground = EarthRotation.SubPoint(s.Position, s.MissionElapsedTime);
             string timeScale = clock.IsPaused ? "PAUSED" : $"x{clock.TimeScale:0.#}";
 
@@ -52,7 +53,7 @@ namespace Apollo.MissionControl
                 $"Latitude       {ground.LatitudeDeg,10:F2} deg\n" +
                 $"Longitude      {ground.LongitudeDeg,10:F2} deg\n" +
                 $"Pos ECI (km)   {s.Position.X / 1000.0,9:F0} {s.Position.Y / 1000.0,9:F0} {s.Position.Z / 1000.0,9:F0}\n" +
-                $"Vel ECI (m/s)  {s.Velocity.X,9:F0} {s.Velocity.Y,9:F0} {s.Velocity.Z,9:F0}";
+                $"Vel ECI (m/s)  {s.Velocity.X,9:F0} {s.Velocity.Y,9:F0} {s.Velocity.Z,9:F0}" + warning;
         }
 
 
@@ -90,7 +91,7 @@ namespace Apollo.MissionControl
             {
                 panelRect.anchorMin = panelRect.anchorMax = panelRect.pivot = new Vector2(0f, 1f);
                 panelRect.anchoredPosition = new Vector2(20f, -20f);
-                panelRect.sizeDelta = new Vector2(640f, 500f);
+                panelRect.sizeDelta = new Vector2(640f, 560f);
             }
             panel.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.7f);
 
