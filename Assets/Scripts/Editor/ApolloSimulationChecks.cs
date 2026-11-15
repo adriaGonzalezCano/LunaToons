@@ -28,6 +28,7 @@ namespace Apollo.EditorTools
             CheckRestartLogic();
             CheckPoweredFlight();
             CheckHighEccentricity();
+            CheckAttitude();
             CheckTrackHistory();
             CheckClock();
             CheckViewMapping();
@@ -247,6 +248,61 @@ namespace Apollo.EditorTools
             // Restart clears the engine state.
             hold.Reset();
             Expect("Burn: restart clears engine state and delta-v", !hold.EngineOn && hold.DeltaVUsed == 0.0 && hold.EngineCutoffReason == "");
+        }
+
+        private static void CheckAttitude()
+        {
+            const double step = 0.05;
+            double Angle(Quaterniond q) => 2 * Math.Acos(Math.Min(1.0, Math.Abs(q.W)));
+
+            // Torque-free, equal inertia: constant rate, exact rotation about the rate axis (Python: drift 0).
+            var w0 = new Vector3d(0.1, -0.05, 0.2);
+            var free = new RigidBodyAttitude(new Vector3d(1, 1, 1), Quaterniond.Identity, w0);
+            for (int i = 0; i < 2400; i++) free.Step(step);
+            Quaterniond expected = Quaterniond.FromAxisAngle(w0, w0.Magnitude * 120.0);
+            double dot = Math.Abs(free.Attitude.W * expected.W + free.Attitude.X * expected.X + free.Attitude.Y * expected.Y + free.Attitude.Z * expected.Z);
+            Expect($"Attitude: torque-free rotation persists unchanged for 120 s (rate drift {(free.Rate - w0).Magnitude:E1}, quaternion error {1 - dot:E1})",
+                   (free.Rate - w0).Magnitude < 1e-10 && 1 - dot < 1e-10);
+
+            // Unequal inertia (tumbling): angular momentum and energy conserved, quaternion stays unit length.
+            var tumble = new RigidBodyAttitude(new Vector3d(1, 2, 3), new Quaterniond(0.8, 0.2, -0.4, 0.4), new Vector3d(0.3, 0.02, -0.15));
+            Vector3d l0 = tumble.AngularMomentumInertial;
+            double e0 = tumble.RotationalEnergy;
+            for (int i = 0; i < 6000; i++) tumble.Step(step);
+            double dl = (tumble.AngularMomentumInertial - l0).Magnitude / l0.Magnitude;
+            double de = Math.Abs(tumble.RotationalEnergy - e0) / e0;
+            Expect($"Attitude: tumbling body conserves angular momentum ({dl:E1}) and energy ({de:E1}), |q| = 1",
+                   dl < 1e-9 && de < 1e-9 && Math.Abs(tumble.Attitude.Norm - 1.0) < 1e-12);
+
+            // Torque pulse: 2 deg/s^2 about X for 5 s gives 10 deg/s and 25 deg; the rate persists after release.
+            double alpha = 2.0 * Math.PI / 180.0;
+            var pulse = new RigidBodyAttitude(new Vector3d(1, 1, 1), Quaterniond.Identity, new Vector3d(0, 0, 0));
+            pulse.SetTorque(new Vector3d(alpha, 0, 0));
+            for (int i = 0; i < 100; i++) pulse.Step(step);
+            pulse.SetTorque(new Vector3d(0, 0, 0));
+            double angleDeg = Angle(pulse.Attitude) * 180.0 / Math.PI;
+            Expect($"Attitude: torque pulse gives {pulse.Rate.X * 180.0 / Math.PI:F6} deg/s and {angleDeg:F6} deg (10 and 25)",
+                   Math.Abs(pulse.Rate.X * 180.0 / Math.PI - 10.0) < 1e-6 && Math.Abs(angleDeg - 25.0) < 1e-4);
+            for (int i = 0; i < 200; i++) pulse.Step(step);
+            Expect("Attitude: rate persists after the torque is released", Math.Abs(pulse.Rate.X * 180.0 / Math.PI - 10.0) < 1e-6);
+
+            // Stop-rotation law: smooth, limited to 2 deg/s^2, no overshoot, at rest within 20 s (Python: 9.8 s).
+            var stop = new RigidBodyAttitude(new Vector3d(1, 1, 1), Quaterniond.Identity,
+                                             new Vector3d(10.0 * Math.PI / 180.0, -6.0 * Math.PI / 180.0, 3.0 * Math.PI / 180.0));
+            double peak = 0, time = 0;
+            bool overshoot = false;
+            double[] sign = { 1, -1, 1 };
+            while (time < 120.0 && !stop.SnapToRest())
+            {
+                Vector3d tq = stop.StopRotationTorque(alpha);
+                peak = Math.Max(peak, Math.Max(Math.Abs(tq.X), Math.Max(Math.Abs(tq.Y), Math.Abs(tq.Z))));
+                stop.SetTorque(tq);
+                stop.Step(step);
+                time += step;
+                if (stop.Rate.X * sign[0] < -1e-9 || stop.Rate.Y * sign[1] < -1e-9 || stop.Rate.Z * sign[2] < -1e-9) overshoot = true;
+            }
+            Expect($"Attitude: stop-rotation reaches rest in {time:F1} s, peak {peak * 180.0 / Math.PI:F3} deg/s^2, overshoot: {overshoot}",
+                   time < 20.0 && !overshoot && peak <= alpha * 1.000001 && stop.Rate.Magnitude == 0.0);
         }
 
         private static void CheckHighEccentricity()
