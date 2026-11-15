@@ -25,6 +25,10 @@ namespace Apollo.Shared
         public double RestartAltitudeMeters => simulation.RestartAltitude;
         public bool PeriapsisIsLow => simulation.PeriapsisIsLow;
         public bool EngineOn => simulation.EngineOn;
+        public RigidBodyAttitude Attitude => simulation.Attitude;
+        public ControlInput Controls => simulation.Controls;
+        public bool ControlsActive => simulation.ControlsActive;
+        public void SetControls(ControlInput controls) => simulation.SetControls(controls);
         public double DeltaVUsed => simulation.DeltaVUsed;
         public double ThrustAcceleration => simulation.ThrustAcceleration;
         public string EngineCutoffReason => simulation.EngineCutoffReason;
@@ -41,7 +45,7 @@ namespace Apollo.Shared
         private void Update()
         {
             // Time-warp is not allowed during a burn (decision V2 #6): drop to x1 while the engine runs.
-            if (simulation.EngineOn && simulation.Clock.TimeScale > 1.0) simulation.Clock.SetTimeScale(1.0);
+            if (simulation.ControlsActive && simulation.Clock.TimeScale > 1.0) simulation.Clock.SetTimeScale(1.0);
 
             if (simulation.Advance(Time.deltaTime) == AdvanceResult.BelowSafeAltitude)
                 Restart($"altitude fell below {restartAltitudeKm:F0} km");
@@ -53,7 +57,7 @@ namespace Apollo.Shared
         /// <summary>Engine on/off (thrust 1 or 0). Starting a burn drops time-warp to x1.</summary>
         public void SetThrust(bool on, bool retrograde = false)
         {
-            if (on && simulation.Clock.TimeScale > 1.0) simulation.Clock.SetTimeScale(1.0);
+            if ((on || simulation.ControlsActive) && simulation.Clock.TimeScale > 1.0) simulation.Clock.SetTimeScale(1.0);
             simulation.SetThrust(on, retrograde);
         }
 

@@ -34,6 +34,9 @@ namespace Apollo.OrbitalSim
         private readonly OdeFunction derivatives;
         private double thrustSign = 1.0;
 
+        /// <summary>Largest angular acceleration the attitude controls can produce (rad/s^2).</summary>
+        public const double MaxAngularAcceleration = 2.0 * Math.PI / 180.0;
+
         public SpacecraftSimulation(KeplerOrbit startOrbit, double restartAltitudeMeters)
         {
             if (startOrbit == null) throw new ArgumentNullException(nameof(startOrbit));
@@ -60,6 +63,19 @@ namespace Apollo.OrbitalSim
 
         /// <summary>Altitude (m) below which the simulation must be restarted. Also the threshold for the low-periapsis warning.</summary>
         public double RestartAltitude { get; }
+
+        /// <summary>Attitude and angular rate of the spacecraft (body-to-inertial quaternion, body rates).</summary>
+        public RigidBodyAttitude Attitude { get; private set; }
+
+        /// <summary>Current pilot commands.</summary>
+        public ControlInput Controls { get; private set; }
+
+        /// <summary>True while anything needs fine time steps and no time-warp: engine on, attitude commanded, or rotation being stopped.</summary>
+        public bool ControlsActive =>
+            EngineOn || Controls.AnyAttitudeAxis || Controls.AnyTranslationAxis ||
+            (Controls.StopRotation && Attitude.Rate.Magnitude > 0.0);
+
+        public void SetControls(ControlInput controls) => Controls = controls;
 
         public bool PeriapsisIsLow => Orbit.PeriapsisAltitude < RestartAltitude;
 
@@ -98,9 +114,9 @@ namespace Apollo.OrbitalSim
             AdvanceResult result = AdvanceResult.Nominal;
             while (t < target)
             {
+                double step = Math.Min(t + (ControlsActive ? PoweredStepSeconds : MaxChunkSeconds), target) - t;
                 if (EngineOn)
                 {
-                    double step = Math.Min(t + PoweredStepSeconds, target) - t;
                     OrbitalState now = State;
                     y[0] = now.Position.X; y[1] = now.Position.Y; y[2] = now.Position.Z;
                     y[3] = now.Velocity.X; y[4] = now.Velocity.Y; y[5] = now.Velocity.Z;
@@ -125,11 +141,12 @@ namespace Apollo.OrbitalSim
                 }
                 else
                 {
-                    double next = Math.Min(t + MaxChunkSeconds, target);
-                    Revolutions += (next - t) / Orbit.Period;
-                    t = next;
+                    Revolutions += step / Orbit.Period;
+                    t += step;
                     State = Orbit.Propagate(t);
                 }
+
+                AdvanceAttitude(step);
 
                 TrackHistory.Record(t, EarthRotation.SubPoint(State.Position, t));
                 if (State.Altitude < RestartAltitude)
@@ -141,6 +158,32 @@ namespace Apollo.OrbitalSim
 
             if (orbitChanged) OrbitVersion++; // once per frame, not per integration step
             return result;
+        }
+
+        private void AdvanceAttitude(double step)
+        {
+            double a = MaxAngularAcceleration;
+            Vector3d inertia = Attitude.Inertia;
+            Vector3d torque;
+            if (Controls.StopRotation)
+                torque = Attitude.StopRotationTorque(a);
+            else
+                torque = new Vector3d(-Controls.Roll * a * inertia.X, -Controls.Pitch * a * inertia.Y, Controls.Yaw * a * inertia.Z);
+
+            Attitude.SetTorque(torque);
+            Attitude.Step(step);
+            if (Controls.StopRotation) Attitude.SnapToRest();
+        }
+
+        /// <summary>Starting attitude: +X along the velocity, +Z away from Earth (radial), +Y completes the right-handed set.</summary>
+        private static Quaterniond InitialAttitude(OrbitalState state)
+        {
+            Vector3d x = state.Velocity * (1.0 / state.Velocity.Magnitude);
+            Vector3d radial = state.Position * (1.0 / state.Position.Magnitude);
+            Vector3d z = radial - x * Vector3d.Dot(radial, x);
+            z = z * (1.0 / z.Magnitude);
+            Vector3d y = Vector3d.Cross(z, x);
+            return Quaterniond.FromBasis(x, y, z);
         }
 
         // y = [x y z vx vy vz]; gravity plus thrust along the velocity direction.
@@ -195,6 +238,8 @@ namespace Apollo.OrbitalSim
             DeltaVUsed = 0.0;
             TrackHistory.Clear();
             State = Orbit.Propagate(0.0);
+            Controls = ControlInput.None;
+            Attitude = new RigidBodyAttitude(new Vector3d(1, 1, 1), InitialAttitude(State), new Vector3d(0, 0, 0));
         }
     }
 }

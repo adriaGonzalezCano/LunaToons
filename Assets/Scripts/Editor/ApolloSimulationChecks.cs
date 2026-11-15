@@ -29,6 +29,7 @@ namespace Apollo.EditorTools
             CheckPoweredFlight();
             CheckHighEccentricity();
             CheckAttitude();
+            CheckAttitudeInSimulation();
             CheckTrackHistory();
             CheckClock();
             CheckViewMapping();
@@ -303,6 +304,74 @@ namespace Apollo.EditorTools
             }
             Expect($"Attitude: stop-rotation reaches rest in {time:F1} s, peak {peak * 180.0 / Math.PI:F3} deg/s^2, overshoot: {overshoot}",
                    time < 20.0 && !overshoot && peak <= alpha * 1.000001 && stop.Rate.Magnitude == 0.0);
+        }
+
+        private static void CheckAttitudeInSimulation()
+        {
+            var sim = new SpacecraftSimulation(KeplerOrbit.Circular(185_000.0, 32.5), 100_000.0);
+            Vector3d x = sim.Attitude.Attitude.Rotate(new Vector3d(1, 0, 0));
+            Vector3d y = sim.Attitude.Attitude.Rotate(new Vector3d(0, 1, 0));
+            Vector3d z = sim.Attitude.Attitude.Rotate(new Vector3d(0, 0, 1));
+            Vector3d vHat = sim.State.Velocity * (1.0 / sim.State.Speed);
+            Vector3d rHat = sim.State.Position * (1.0 / sim.State.Position.Magnitude);
+            Expect("Attitude: starts with +X along the velocity, +Z radial, right-handed (X x Y = Z)",
+                   (x - vHat).Magnitude < 1e-9 && (z - rHat).Magnitude < 1e-9 && (Vector3d.Cross(x, y) - z).Magnitude < 1e-9);
+            Expect("Attitude: no controls, no rotation, no warp lockout", !sim.ControlsActive && sim.Attitude.Rate.Magnitude == 0.0);
+
+            // Sign conventions: pitch +1 = nose up (rate about -Y), yaw +1 = nose right (+Z), roll +1 = roll right (-X).
+            double alpha = SpacecraftSimulation.MaxAngularAcceleration;
+            ControlInput Cmd(double pitch, double yaw, double roll) => new ControlInput { Pitch = pitch, Yaw = yaw, Roll = roll };
+            sim.SetControls(Cmd(1, 0, 0)); sim.Advance(1.0);
+            Expect("Attitude: controls active flag raised while commanding", sim.ControlsActive);
+            Expect($"Attitude: pitch +1 gives nose-up rate ({sim.Attitude.Rate.Y * 180.0 / Math.PI:F3} deg/s about Y)", sim.Attitude.Rate.Y < 0 && Math.Abs(sim.Attitude.Rate.Y + alpha) < 1e-9);
+            sim.Reset();
+            sim.SetControls(Cmd(0, 1, 0)); sim.Advance(1.0);
+            Expect("Attitude: yaw +1 gives rate about +Z", sim.Attitude.Rate.Z > 0 && Math.Abs(sim.Attitude.Rate.Z - alpha) < 1e-9);
+            sim.Reset();
+            sim.SetControls(Cmd(0, 0, 1)); sim.Advance(1.0);
+            Expect("Attitude: roll +1 gives rate about -X", sim.Attitude.Rate.X < 0 && Math.Abs(sim.Attitude.Rate.X + alpha) < 1e-9);
+
+            // Frame-rate independence of a 5 s command followed by 100 s of coasting.
+            RigidBodyAttitude Run(double frame)
+            {
+                var s = new SpacecraftSimulation(KeplerOrbit.Circular(185_000.0, 32.5), 100_000.0);
+                s.SetControls(Cmd(0.5, 1, -1));
+                for (int i = 0; i < (int)Math.Round(5.0 / frame); i++) s.Advance(frame);
+                s.SetControls(ControlInput.None);
+                for (int i = 0; i < (int)Math.Round(100.0 / frame); i++) s.Advance(frame);
+                return s.Attitude;
+            }
+            RigidBodyAttitude a = Run(1.0 / 30.0), b = Run(1.0 / 144.0);
+            double qd = 1 - Math.Abs(a.Attitude.W * b.Attitude.W + a.Attitude.X * b.Attitude.X + a.Attitude.Y * b.Attitude.Y + a.Attitude.Z * b.Attitude.Z);
+            Expect($"Attitude: identical at 30 and 144 fps (quaternion {qd:E1}, rate {(a.Rate - b.Rate).Magnitude:E1}), rate persists after release",
+                   qd < 1e-9 && (a.Rate - b.Rate).Magnitude < 1e-9 && a.Rate.Magnitude > 0.05);
+
+            // Angular momentum conserved while coasting in orbit after release; stop-rotation brings it to rest.
+            var spin = new SpacecraftSimulation(KeplerOrbit.Circular(185_000.0, 32.5), 100_000.0);
+            spin.SetControls(Cmd(0.5, 1, -1));
+            for (int i = 0; i < 300; i++) spin.Advance(1.0 / 60.0);
+            spin.SetControls(ControlInput.None);
+            Vector3d lSpin = spin.Attitude.AngularMomentumInertial;
+            spin.Advance(600.0);
+            Expect("Attitude: angular momentum conserved over 600 s of coasting", (spin.Attitude.AngularMomentumInertial - lSpin).Magnitude / lSpin.Magnitude < 1e-9);
+
+            spin.SetControls(new ControlInput { StopRotation = true });
+            double tStop = 0;
+            while (spin.ControlsActive && tStop < 60) { spin.Advance(1.0 / 60.0); tStop += 1.0 / 60.0; }
+            Expect($"Attitude: stop-rotation brings the vehicle to rest in {tStop:F1} s and releases the warp lockout",
+                   spin.Attitude.Rate.Magnitude == 0.0 && !spin.ControlsActive && tStop < 30);
+
+            // Warp: a coasting, torque-free rotation survives x1000 time-warp.
+            var warp = new SpacecraftSimulation(KeplerOrbit.Circular(185_000.0, 32.5), 100_000.0);
+            warp.SetControls(Cmd(0, 1, 0)); warp.Advance(2.0); warp.SetControls(ControlInput.None);
+            Vector3d lw = warp.Attitude.AngularMomentumInertial;
+            warp.Clock.SetTimeScale(1000.0);
+            for (int i = 0; i < 300; i++) warp.Advance(1.0 / 60.0);
+            Expect("Attitude: rotation conserved under x1000 time-warp", (warp.Attitude.AngularMomentumInertial - lw).Magnitude / lw.Magnitude < 1e-9);
+
+            sim.SetControls(Cmd(1, 1, 1));
+            sim.Reset();
+            Expect("Attitude: restart clears controls and rotation", !sim.Controls.AnyAttitudeAxis && sim.Attitude.Rate.Magnitude == 0.0);
         }
 
         private static void CheckHighEccentricity()

@@ -45,6 +45,7 @@ namespace Apollo.MissionControl
                 $"Orbit #        {orbitNumber}\n" +
                 $"Engine         {engine}\n" +
                 $"Delta-v used   {host.DeltaVUsed,10:F1} m/s\n" +
+                $"Rate roll/pit/yaw {RateDeg(host.Attitude.Rate.X),6:F2} {RateDeg(host.Attitude.Rate.Y),6:F2} {RateDeg(host.Attitude.Rate.Z),6:F2} deg/s\n" +
                 $"Altitude       {s.Altitude / 1000.0,10:F3} km\n" +
                 $"Speed          {s.Speed,10:F2} m/s\n" +
                 $"Period         {s.Period / 60.0,10:F2} min\n" +
@@ -59,6 +60,8 @@ namespace Apollo.MissionControl
                 $"Vel ECI (m/s)  {s.Velocity.X,9:F0} {s.Velocity.Y,9:F0} {s.Velocity.Z,9:F0}" + warning;
         }
 
+
+        private static double RateDeg(double radiansPerSecond) => radiansPerSecond * 180.0 / Math.PI;
 
         private static string FormatCompact(OrbitalState s, SimulationClock clock)
         {
