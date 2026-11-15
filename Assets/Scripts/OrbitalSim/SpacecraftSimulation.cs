@@ -11,19 +11,21 @@ namespace Apollo.OrbitalSim
 
     /// <summary>
     /// The spacecraft simulation (pure C#, no Unity). Single source of truth for the spacecraft state.
-    /// Coasting is analytic (KeplerOrbit). A velocity change recomputes the orbit from the current state vector
-    /// (approach A), so the position and velocity are continuous across the change.
+    /// Coasting is analytic (CoastOrbit, exact two-body motion from a state vector). A velocity change starts a new
+    /// CoastOrbit from the new state, so position and velocity are continuous across the change. Powered flight
+    /// (finite burns integrated with RK4) is added in V2 milestone 2.
     /// </summary>
     public sealed class SpacecraftSimulation
     {
         /// <summary>Longest span of mission time evaluated in one go, so a fast time-warp cannot skip past a low point.</summary>
         public const double MaxChunkSeconds = 1.0;
 
-        private readonly KeplerOrbit initialOrbit;
+        private readonly CoastOrbit initialOrbit;
 
-        public SpacecraftSimulation(KeplerOrbit orbit, double restartAltitudeMeters)
+        public SpacecraftSimulation(KeplerOrbit startOrbit, double restartAltitudeMeters)
         {
-            initialOrbit = orbit ?? throw new ArgumentNullException(nameof(orbit));
+            if (startOrbit == null) throw new ArgumentNullException(nameof(startOrbit));
+            initialOrbit = CoastOrbit.FromKepler(startOrbit, 0.0);
             RestartAltitude = restartAltitudeMeters;
             TrackHistory = new GroundTrackHistory();
             Reset();
@@ -33,7 +35,7 @@ namespace Apollo.OrbitalSim
         public GroundTrackHistory TrackHistory { get; }
 
         /// <summary>Current coasting orbit. Replaced when a velocity change is applied.</summary>
-        public KeplerOrbit Orbit { get; private set; }
+        public CoastOrbit Orbit { get; private set; }
 
         /// <summary>Incremented every time the orbit changes (start, velocity change, restart); views rebuild when it moves.</summary>
         public int OrbitVersion { get; private set; }
@@ -70,13 +72,13 @@ namespace Apollo.OrbitalSim
         }
 
         /// <summary>
-        /// Instantaneous velocity change (m/s, inertial frame). Recomputes the orbit from the current state.
+        /// Instantaneous velocity change (m/s, inertial frame). Starts a new coasting orbit from the changed state.
         /// Returns false, changing nothing, if the result would not be a bound elliptical orbit.
         /// </summary>
         public bool ApplyVelocityChange(Vector3d deltaVelocity)
         {
             OrbitalState now = Orbit.Propagate(Clock.MissionElapsedTime);
-            if (!KeplerOrbit.TryFromState(now.Position, now.Velocity + deltaVelocity, Clock.MissionElapsedTime, out KeplerOrbit changed))
+            if (!CoastOrbit.TryCreate(now.Position, now.Velocity + deltaVelocity, Clock.MissionElapsedTime, out CoastOrbit changed))
                 return false;
 
             Orbit = changed;

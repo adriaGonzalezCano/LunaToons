@@ -56,7 +56,7 @@ namespace Apollo.MissionControl
         // The ring is the current orbit; it is rebuilt whenever a velocity change (or restart) replaces the orbit.
         private void RebuildTrajectory()
         {
-            KeplerOrbit orbit = host.Orbit;
+            CoastOrbit orbit = host.Orbit;
             double now = host.CurrentState.MissionElapsedTime;
             for (int i = 0; i < trajectorySamples; i++)
             {

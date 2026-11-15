@@ -23,7 +23,7 @@ namespace Apollo.EditorTools
             CheckCircular();
             CheckElliptical(KeplerOrbit.EarthRadius + 0.0, 12_000_000.0, 0.3, 51.6);
             CheckEarthRotation();
-            CheckReseed();
+            CheckCoastPropagator();
             CheckVelocityChange();
             CheckRestartLogic();
             CheckTrackHistory();
@@ -114,9 +114,9 @@ namespace Apollo.EditorTools
                    Math.Abs(EarthRotation.Angle(siderealDay)) < 1e-9);
         }
 
-        // --- V2 milestone 0: orbit recomputed from a state vector (approach A) -----------------------------------------------
+        // --- V2 milestone 0: coasting from a state vector (approach B, universal variables) --------------------------------------
 
-        private static void CheckReseed()
+        private static void CheckCoastPropagator()
         {
             double deg = Math.PI / 180.0;
             double r = KeplerOrbit.EarthRadius;
@@ -128,6 +128,7 @@ namespace Apollo.EditorTools
                 ("elliptical equatorial", new KeplerOrbit(9.0e6, 0.1, 0.0, 0.0, 2.0, 1.0)),
                 ("elliptical retrograde equatorial", new KeplerOrbit(9.0e6, 0.1, Math.PI, 0.0, 2.0, 1.0)),
                 ("near-circular e=1e-4", new KeplerOrbit(r + 300e3, 1e-4, 28.5 * deg, 1.2, 0.5, 2.0)),
+                ("highly elliptical e=0.7", new KeplerOrbit(24.0e6, 0.7, 63.4 * deg, 0.5, 4.5, 2.5)),
                 ("polar", new KeplerOrbit(r + 600e3, 0.02, 90.0 * deg, 2.0, 1.0, 3.0)),
             };
 
@@ -138,17 +139,36 @@ namespace Apollo.EditorTools
                 foreach (double t0 in new[] { 0.0, 1234.5, 5000.0, 40000.0 })
                 {
                     OrbitalState s0 = orbit.Propagate(t0);
-                    if (!KeplerOrbit.TryFromState(s0.Position, s0.Velocity, t0, out KeplerOrbit rebuilt)) { built = false; break; }
-                    foreach (double dt in new[] { 0.0, 777.0, 20000.0, 86164.0 })
+                    if (!CoastOrbit.TryCreate(s0.Position, s0.Velocity, t0, out CoastOrbit coast)) { built = false; break; }
+                    foreach (double dt in new[] { 0.0, 1.0, 777.0, 5000.0, 20000.0, 86164.0, 1.0e6, -500.0, -20000.0 })
                     {
-                        OrbitalState a = orbit.Propagate(t0 + dt), b = rebuilt.Propagate(t0 + dt);
+                        OrbitalState a = orbit.Propagate(t0 + dt), b = coast.Propagate(t0 + dt);
                         worstPosition = Math.Max(worstPosition, (a.Position - b.Position).Magnitude);
                         worstVelocity = Math.Max(worstVelocity, (a.Velocity - b.Velocity).Magnitude);
                     }
                 }
-                Expect($"Reseed round trip, {name} (position {worstPosition:E1} m, velocity {worstVelocity:E1} m/s)",
+                Expect($"Coast from state vector matches element propagation, {name} (position {worstPosition:E1} m, velocity {worstVelocity:E1} m/s)",
                        built && worstPosition < 1e-3 && worstVelocity < 1e-6);
             }
+
+            // Energy and angular momentum are conserved along a coast, and the default circular orbit needs no special case.
+            CoastOrbit eccentric = CoastOrbit.FromKepler(cases[2].orbit, 0.0);
+            OrbitalState first = eccentric.Propagate(0.0);
+            double energy0 = first.Speed * first.Speed / 2 - KeplerOrbit.MuEarth / first.Position.Magnitude;
+            double h0 = Vector3d.Cross(first.Position, first.Velocity).Magnitude;
+            double worstEnergy = 0, worstH = 0;
+            for (int i = 0; i <= 2000; i++)
+            {
+                OrbitalState s = eccentric.Propagate(eccentric.Period * 3 * i / 2000);
+                double energy = s.Speed * s.Speed / 2 - KeplerOrbit.MuEarth / s.Position.Magnitude;
+                worstEnergy = Math.Max(worstEnergy, Math.Abs(energy - energy0) / Math.Abs(energy0));
+                worstH = Math.Max(worstH, Math.Abs(Vector3d.Cross(s.Position, s.Velocity).Magnitude - h0) / h0);
+            }
+            Expect($"Coast: energy and angular momentum conserved (worst {worstEnergy:E1}, {worstH:E1})", worstEnergy < 1e-9 && worstH < 1e-9);
+
+            CoastOrbit start = CoastOrbit.FromKepler(KeplerOrbit.Circular(185_000.0, 32.5), 0.0);
+            Expect($"Coast: default circular orbit has eccentricity {start.Eccentricity:E1} and period {start.Period / 60.0:F2} min",
+                   start.Eccentricity < 1e-9 && Math.Abs(start.Period - 5282.8636) < 1e-3);
         }
 
         private static void CheckVelocityChange()

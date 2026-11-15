@@ -47,7 +47,7 @@ namespace Apollo.MissionControl
             if (host == null || host.Orbit == null || marker == null) return;
 
             OrbitalState state = host.CurrentState;
-            KeplerOrbit orbit = host.Orbit;
+            CoastOrbit orbit = host.Orbit;
             double now = state.MissionElapsedTime;
 
             GeoPoint here = EarthRotation.SubPoint(state.Position, now);

@@ -16,7 +16,7 @@ namespace Apollo.Shared
 
         private SpacecraftSimulation simulation;
 
-        public KeplerOrbit Orbit => simulation?.Orbit;
+        public CoastOrbit Orbit => simulation?.Orbit;
         public int OrbitVersion => simulation != null ? simulation.OrbitVersion : 0;
         public SimulationClock Clock => simulation.Clock;
         public OrbitalState CurrentState => simulation.State;

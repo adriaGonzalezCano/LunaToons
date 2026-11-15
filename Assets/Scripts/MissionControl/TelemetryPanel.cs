@@ -29,7 +29,7 @@ namespace Apollo.MissionControl
             label.text = compact ? FormatCompact(host.CurrentState, host.Clock) : Format(host.CurrentState, host.Orbit, host.Clock, host);
         }
 
-        private static string Format(OrbitalState s, KeplerOrbit orbit, SimulationClock clock, SimulationHost host)
+        private static string Format(OrbitalState s, CoastOrbit orbit, SimulationClock clock, SimulationHost host)
         {
             TimeSpan met = TimeSpan.FromSeconds(s.MissionElapsedTime);
             int orbitNumber = (int)Math.Floor(host.Revolutions) + 1;
